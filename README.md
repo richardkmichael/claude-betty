@@ -16,6 +16,9 @@ installed independently.
   conventions.
 - `git-interactive` — reshape git history: interactive rebase, split, squash, reorder, amend,
   `add -p`. Uses the `tmux` skill for the terminal session.
+- `handle-ci-failure` — diagnose a failed GitHub Actions run, match it to a known failure pattern,
+  fix it, verify, then commit and push. Reads a per-project `.github/HANDLE_CI_FAILURE.md` for the
+  branch, check command, push policy, and project-specific patterns.
 - `history` — search and read past Claude Code session transcripts.
 - `learning-quiz` — teach the operator the concepts covered in the session, working a checklist and
   quizzing to confirm each stage before moving on.
