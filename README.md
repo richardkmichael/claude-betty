@@ -24,6 +24,8 @@ installed independently.
   quizzing to confirm each stage before moving on.
 - `matlab-docs` — look up MATLAB documentation by function name, `mathworks.com` URL, or local
   help-HTML path. Checks a local MATLAB install before the network.
+- `matlab-profile` — investigate MATLAB performance: time hotspots, memory, parallelism, and call
+  patterns. Profiles and reports; it does not change your code.
 - `refine-plan` — interview the user about a plan file to sharpen it.
 - `tmux` — drive interactive CLIs (git, python, gdb) by sending keystrokes and scraping pane
   output.
