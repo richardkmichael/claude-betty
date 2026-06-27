@@ -174,9 +174,9 @@ the identical result and are exactly what the workflows below rely on:
   `git reset -p` / `git checkout -p`.
 - Combining recent commits -- `git reset --soft <base>` then `git commit -F`.
 - Commit messages -- always `git commit -F <file>` (or `-m`), never an editor.
-- Rebase -- feed the todo with `GIT_SEQUENCE_EDITOR="cp <todo>"` and supply
-  reword/squash messages with the stop-and-rewrite loop in Workflow: Rewriting
-  History.
+- Rebase -- let git emit the todo, capture and edit it, then `cp` the edited copy
+  back; supply reword/squash messages with `GIT_EDITOR="cp <msg>"`. See Workflow:
+  Rewriting History.
 
 Never use tmux, a blocking editor, or `git add -p` / `git add -i`. They need a
 terminal you don't have, and the seams above do the same job directly.
@@ -293,13 +293,44 @@ rebase: split in one pass, reorder and combine in the next, running
 
 ### Driving the rebase
 
-Feed the todo and stop git rather than letting it open a blocking editor:
+A todo line is `<command> <sha> <oneline>`. git executes only the command and the
+SHA; everything after the SHA is a human-readable comment it discards -- which is
+why a `# ` can sit before the title. So edit the todo by command and SHA only:
+change verbs, reorder lines, drop lines. Never read or match against the title; a
+pattern that assumes the subject follows the SHA matches nothing the moment the
+title's format shifts, and the rebase then silently does nothing.
+
+Let git emit its own todo and edit that -- don't reconstruct it, which would lose
+any `merge`/`exec`/`label` lines git puts there. Capture it, edit it with your
+tools, feed it back: two `git rebase -i` invocations with your edits in between.
 
 ```bash
-git log --reverse --format='pick %H %s' <base>..HEAD > /tmp/todo
-# edit /tmp/todo: change verbs (squash/edit/drop), reorder lines, add `break`
+# 1. capture git's real todo, then abort (nothing is applied)
+printf '#!/bin/sh\ncp "$1" /tmp/todo\nexit 1\n' > /tmp/seq.sh && chmod +x /tmp/seq.sh
+GIT_SEQUENCE_EDITOR=/tmp/seq.sh git rebase -i <base>   # reports an aborted rebase; expected
+# 2. Read /tmp/todo and edit it -- change verbs, reorder lines, add `break` --
+#    with the Edit tool, on git's own bytes (full structure intact).
+# 3. replay the edited todo
 GIT_SEQUENCE_EDITOR="cp /tmp/todo" GIT_EDITOR=false git rebase -i <base>
 ```
+
+`cp /tmp/todo` takes no `$1`: git appends the todo path, so it runs
+`cp /tmp/todo <path>`, overwriting git's todo with your edited one. The capture
+script's `exit 1` aborts the first rebase -- git prints an editor-failed error,
+expected; `/tmp/todo` already holds the bytes.
+
+A single verb flip can skip the round trip: edit git's todo in place in one
+invocation, keying on the SHA and rewriting only the leading verb.
+
+```bash
+H=$(git rev-parse --short <sha>)   # the abbreviation git writes in its todo
+printf '#!/bin/sh\nperl -i -pe '\''s/^pick/edit/ if /^pick %s[0-9a-f]*\\b/'\'' "$1"\n' "$H" > /tmp/seq.sh
+chmod +x /tmp/seq.sh
+GIT_SEQUENCE_EDITOR=/tmp/seq.sh GIT_EDITOR=false git rebase -i <base>
+```
+
+The `[0-9a-f]*` tolerates a longer abbreviation; only the verb changes, so the
+title's format is irrelevant.
 
 The rebase runs until it needs you, then returns to the shell; read its output
 and `git status` to see where it stopped. Three kinds of stop:
