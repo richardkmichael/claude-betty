@@ -304,21 +304,24 @@ GIT_SEQUENCE_EDITOR="cp /tmp/todo" GIT_EDITOR=false git rebase -i <base>
 The rebase runs until it needs you, then returns to the shell; read its output
 and `git status` to see where it stopped. Three kinds of stop:
 
-Reword or squash message. `GIT_EDITOR=false` stopped git at the message step,
-with its assembled text (for a squash, the concatenated messages) sitting in
-`.git/rebase-merge/message`. Read that file, rewrite it in place to the final
-message, then resume accepting the file as-is:
+Reword or squash message. When you know the final message ahead of time, skip the
+stop with `GIT_EDITOR="cp /tmp/msg"`: git runs `cp /tmp/msg` over its message file
+in the callback and commits with it, no stop. End the message with the
+`Curated-by: git-wright` trailer.
 
-```bash
-# read .git/rebase-merge/message; rewrite it to the final message, ending with
-# the trailer line:  Curated-by: git-wright
-GIT_EDITOR=true git rebase --continue
-```
+If you instead let git stop at the message step (`GIT_EDITOR=false`), reword and
+squash differ in where git has stopped:
 
-Nothing wrong is ever committed: git stops before the squash commit, so the only
-commit made carries your rewritten message. This handles one message per stop;
-a second squash/reword group in the same pass needs its own pass, which is why
-passes stay focused.
+- Squash: git stops before creating the squashed commit, with the concatenated
+  messages in `.git/rebase-merge/message`. Rewrite that file to the final message,
+  then `GIT_EDITOR=true git rebase --continue` -- the commit git then makes carries
+  it.
+- Reword: git has already remade the commit with its original message and stops
+  asking you to amend. Rewriting `.git/rebase-merge/message` is too late; instead
+  `git commit --amend -F /tmp/msg` (trailer included), then `git rebase --continue`.
+
+One message per stop; a second reword/squash group in the same pass needs its own
+pass, which is why passes stay focused.
 
 `edit` stop, to split a commit. git pauses with the commit applied:
 
