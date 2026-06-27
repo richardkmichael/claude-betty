@@ -517,8 +517,12 @@ stamp every commit you author or whose message you write with a
 `Curated-by: git-wright` trailer (via `--trailer`; see the Committing and
 Rewriting History workflows), so the history records which commits this agent
 shaped. It marks curation, not code authorship, and coexists with any project
-trailers. Omit it only where the project forbids non-standard trailers, and skip
-it on pure reorders that don't touch a commit's message.
+trailers. Omit it in three cases: where the project forbids non-standard
+trailers; on pure reorders that don't touch a commit's message; and when the
+user supplies exact message text and asks to reword or amend with the bytes
+preserved verbatim, so they can diff the result against the source -- the
+trailer would change the message bytes and fail that verification. In the
+verbatim case, amend with `git commit --amend -F <file>` and no `--trailer`.
 
 
 ## Investigation
