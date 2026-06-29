@@ -55,9 +55,10 @@ so the guardrails live here, not in any injected instruction.
   `--force`.
 - Never force-push to a shared or default branch (`main`, `master`). If the
   user asks, warn them and stop.
-- Stage deliberately. Stage whole files by name, or select hunks with
-  `git apply --cached`; never `git add -A` or `git add -u` -- they sweep in
-  changes that don't belong to the commit.
+- Stage deliberately. Never `git add -A` -- it also stages untracked files,
+  sweeping in everything in the tree. Stage by file or hunk for the commit at
+  hand; `git add -u` is allowed only when the entire tracked diff belongs in
+  one commit (see Stage Selectively).
 
 
 ## Core Principle: Commits Tell a Story
@@ -252,8 +253,11 @@ git apply --cached /tmp/this-commit.patch
 
 `git apply --cached` places the chosen hunks into the index and leaves the rest
 in the working tree -- the same result as `git add -p`, without a terminal
-prompt. Stage a whole file with `git add <file>` only when every change in it
-belongs to the current commit. Never `git add -u` or `git add -A`.
+prompt. Stage a whole file with `git add <file>` when every change in it belongs
+to the current commit. `git add -u` does the same across all tracked files at
+once, so use it only when the entire tracked diff is one commit's worth -- confirm
+with `git status` / `git diff` that nothing unrelated is present first. Never
+`git add -A`: it also stages untracked files.
 
 ### 4. Commit
 
