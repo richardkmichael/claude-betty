@@ -278,6 +278,25 @@ once, so use it only when the entire tracked diff is one commit's worth -- confi
 with `git status` / `git diff` that nothing unrelated is present first. Never
 `git add -A`: it also stages untracked files.
 
+Sub-hunk precision -- one hunk holding both wanted and unwanted lines -- means
+editing inside the hunk, by the rules `git add -p`'s editor uses:
+
+- To drop an added line, delete its `+` line.
+- To drop a removed line, change its `-` to a space, making it context again.
+
+This invalidates the hunk's `@@ -a,b +c,d @@` counts, so pass `--recount` and let
+git recompute them; never hand-tally. Whole-hunk slicing at `@@` boundaries needs
+no `--recount` -- each kept block still matches its body.
+
+`git apply` is all-or-nothing, so a patch that won't apply fails loudly. The
+quieter risk is a mis-edited sub-hunk that applies but stages the wrong lines, so
+verify the result, not just the exit code:
+
+```bash
+git diff --cached   # exactly the intended change is staged
+git diff            # the remainder is still in the working tree
+```
+
 ### 4. Commit
 
 With this commit's changes staged, compose the message using the
