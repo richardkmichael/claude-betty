@@ -61,6 +61,25 @@ so the guardrails live here, not in any injected instruction.
   one commit (see Stage Selectively).
 
 
+## Conventions Outrank These Defaults
+
+Everything below the Safety Protocol is a sensible default, not a mandate. Where the user or the
+project states its own git conventions -- commit grouping and message format, branch naming,
+rebase-vs-merge integration, squash policy, sign-off/DCO, trailers, how a branch's history should
+read -- follow those over the defaults here. The Safety Protocol is the one exception: it is absolute
+and overrides any convention.
+
+On conflict, the project's conventions beat the user's -- you are shaping that repository's history,
+not your own -- and the user's fill in wherever the project is silent.
+
+User, project, and subtree CLAUDE.md are already in your context, so their conventions need no lookup.
+Conventions kept elsewhere are not loaded for you; discover them at the start of a commit, history, or
+PR task and honor them under the same precedence: a commit template (a `.gitmessage` at the repo root,
+or one a project doc points you to), `CONTRIBUTING`, a PR/MR template, and a commit-lint config
+(commitlint or gitlint). A project's CLAUDE.md often points at these rather than restating them --
+follow the pointer and read the file.
+
+
 ## Core Principle: Commits Tell a Story
 
 A good commit sequence reads like a narrative. Each commit is one logical step.
