@@ -27,6 +27,8 @@ installed independently.
 - `matlab-profile` — investigate MATLAB performance: time hotspots, memory, parallelism, and call
   patterns. Profiles and reports; it does not change your code.
 - `refine-plan` — interview the user about a plan file to sharpen it.
+- `review-pr-companion` — package a code review as a review branch of fixup or standalone commits
+  plus a REVIEW_HANDOFF.md that walks the author's agent through it, pushed with no PR opened.
 - `tmux` — drive interactive CLIs (git, python, gdb) by sending keystrokes and scraping pane
   output.
 - `tool-usage` — query the `tool-monitor` database to analyze Claude's tool usage.
