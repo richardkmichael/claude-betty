@@ -14,16 +14,16 @@ Turn a code review into a branch the author can integrate directly. Instead of
 leaving comments and waiting for someone to re-derive the fixes, you deliver:
 
 - a review branch of small, reviewer-shaped commits for the agreed fixes;
+- `REVIEW_PLAN.md`, the reviewer's document: numbered items, the reasoning
+  behind each, and follow-ups;
 - `REVIEW_HANDOFF.md`, whose whole audience is the author's coding agent;
-- `REVIEW_PLAN.md`, the numbered item list, build order, and follow-ups;
 - optional follow-up specs for work deliberately left out of scope; and
-- a drafted PR comment that points the author's agent at the handoff.
+- a drafted review comment linking the branch and its compare view.
 
 The premise: the fastest way to discuss code is a diff plus a briefing the other
 side's agent can read.
 
-Two rules hold throughout. Make no commits until the reviewer approves the plan.
-Keep credentials in environment variables or `.env`, never in the branch.
+Make no commits until the reviewer approves the plan.
 
 ## 1. Locate the target and create the review branch
 
@@ -77,10 +77,21 @@ reviewer runs it and brings its findings into the triage below.
 here -- the reviewer writes their own comment and turns findings into commits --
 so tell the subagent to report the findings back, not post them.
 
-Triage the findings with the reviewer, then write `REVIEW_PLAN.md`: a numbered
-table of items (issues and nits), each marked as a fixup (with its target commit)
-or standalone; the build order and pick-order dependencies; and a follow-ups
-section for work that is real but out of scope for this branch.
+Triage the findings with the reviewer, then write `REVIEW_PLAN.md` from
+`references/REVIEW_PLAN.template.md`. It is the reviewer's document and it reads
+standalone: identifiers, scope, an overview table, one numbered section per item,
+verification, follow-ups.
+
+Two fields in the header do work later and are easy to leave vague. The PR head
+SHA is what the whole review is written against. The base -- `git merge-base
+<base-branch> <pr-head>` -- is what the author rebases onto at the end, so record
+the SHA, not a description of it.
+
+Each item's numbered section is where the review's thinking lives: what changes
+and why, the alternatives explored and rejected, any pick-order dependency, and
+what was verified. Write it to be read on its own, because the handoff sends the
+author's agent to one section at a time, and the item number is the only thing
+tying the two documents together.
 
 ## 3. Approval gate
 
@@ -97,24 +108,46 @@ identifiable commit on the author's branch, commit it as a fixup to that commit
 target, commit it standalone with a final-form message. Run the project's tests
 and lint after each commit, and never truncate the test output.
 
+Target the root commit, never another fixup. `git commit --fixup=<a fixup's sha>`
+takes that commit's subject verbatim and prefixes it again, giving
+`fixup! fixup! <subject>`. Autosquash still folds it into the root -- it strips
+prefixes until one matches, and it does not need the intermediate to be present
+-- but the chained subject hides which commit the unit is really for, and it
+means the fix was written on top of another fix, so the two probably need a
+pick-order dependency in the plan.
+
+Autosquash matches on the subject line, so a fixup whose root subject matches no
+commit on the author's branch folds nowhere and survives the rebase as a stray.
+Nothing warns about it. Check the whole set before writing the docs -- silence
+means every fixup resolves:
+
+```bash
+"$CLAUDE_SKILL_DIR"/scripts/check-fixup-targets.sh <base> <pr-head>
+```
+
+It reports two things: a fixup with no target on the author's branch, and a
+chained one to retarget. Fix what it finds and run it again.
+
 ## 5. Write the handoff and follow-up docs
 
 `REVIEW_HANDOFF.md` is addressed entirely to the author's coding agent, not to a
-human, and it is a walkthrough script, not a static summary. It tells that agent
-to walk the author through the branch unit by unit and apply what they accept:
-for each item in plan order, explain what it is and why (from the reasoning in
-this file), show the diff (`git show <sha>`), and ask the author to take or skip
-it; cherry-pick each accepted unit onto the author's branch (a fixup keeps its
-`fixup!` target); then `git rebase -i --autosquash <base>` to fold the fixups,
-run the tests, and report what was taken and skipped. Every unit is a proposal --
-the agent does not push, and the author can decline any of them.
+human, and it is a walkthrough script, not a static summary. It carries the
+operational detail and defers every explanation to `REVIEW_PLAN.md`.
 
-So the file must carry: the agent's role and the proposal framing; how to orient
-(`git fetch`, `git log`, `git diff`, `git show`); the ordered unit list with each
-unit's fixup target or standalone mark and any dependency; the changes by area;
-and the reasoning behind contested decisions, including rejected alternatives, so
-the agent can answer "why not X" during the walk. `REVIEW_PLAN.md` from step 2
-and any follow-up specs ride along.
+Fill in `references/REVIEW_HANDOFF.template.md`. Its shape is the deliverable --
+role and framing, orient commands, unit table, the per-unit loop, the finish --
+so follow it rather than composing a new one. Three things it cannot enforce for
+you:
+
+- Write the base SHA out literally in the rebase command. An agent that has to
+  derive it can pick the PR head instead, and the rebase then folds nothing.
+- Mention `REVIEW_PLAN.md` exactly once, in the loop's first step, where the
+  template already does. That single instruction carries the whole document.
+  Repeating the pointer, or copying rationale and follow-ups back into the
+  handoff, is what makes the two files duplicate each other.
+- Name the docs commit and say it is not a unit. It is the reviewer's notes
+  rather than a proposal, and an agent walking the branch will otherwise offer
+  it as one more unit or fold it into the author's history.
 
 Commit all the docs as one separate meta commit, clearly apart from the code
 fixes, so the author can drop or ignore them without touching the fixes.
@@ -127,10 +160,46 @@ Push the branch and open no pull request:
 git push -u origin review/pr-42-hitchhikers-guide
 ```
 
-Draft -- but do not post -- a PR comment that points the author's agent at
-`REVIEW_HANDOFF.md`, and let the reviewer post it. Verify the branch is up and
-the doc links resolve; a branch name with a slash resolves fine in a
-`blob/<branch>/FILE` URL, but confirm it rather than assume.
+GitHub cannot delete a pull request, so opening one would leave a closed PR in
+the repo's list after every review, for everyone else to filter out. A compare
+view gives the same side-by-side diff and commit list and leaves nothing behind.
+
+Draft -- but do not post -- the review comment. It points the author's agent at
+`REVIEW_HANDOFF.md` and carries three links:
+
+```
+https://github.com/<owner>/<repo>/tree/<review-branch>
+https://github.com/<owner>/<repo>/compare/pull/<N>/head...<review-branch>
+https://diffshub.com/<owner>/<repo>/compare/pull/<N>/head...<review-branch>
+```
+
+The compare links show the review commits as a diff against the PR head, which
+is the proposed delta and the thing to read first; both hosts take the same path.
+Use this same `pull/<N>/head` form in the handoff's orient section -- one URL
+string across both documents. It tracks the PR as it advances, which is what the
+handoff already tells the reader to do when the branch has moved on; a form
+pinned to the review-time SHA would contradict that instruction.
+Say next to the diffshub link that it needs the reader's own GitHub fine-grained
+token in browser localStorage, so a reader without one knows why it will not
+load. For a local branch with no PR, compare against the branch itself:
+`compare/<branch>...<review-branch>`.
+
+Write the comment body to a file and hand the reviewer the command. A review
+that was requested belongs on the PR as a review submission with a verdict rather
+than a loose comment, so ask the reviewer which verdict:
+
+```bash
+gh pr review <N> --request-changes --body-file <path>   # or --approve, --comment
+gh pr comment <N> --body-file <path>                    # when no review was requested
+```
+
+Verify before handing it over: the branch is up, the compare refs resolve, and
+the doc links resolve. A branch name with a slash works in `tree/<branch>`,
+`blob/<branch>/FILE` and `compare/...` URLs, but confirm it rather than assume.
+
+```bash
+gh api "repos/<owner>/<repo>/compare/pull/<N>/head...<review-branch>" --jq .status
+```
 
 ## The commits are units of feedback
 
@@ -143,13 +212,10 @@ follows the integration:
   `git commit --fixup=<that commit>`. The message becomes `fixup! <target
   subject>`; cherry-pick preserves it, and the author's `git rebase -i
   --autosquash <base>` folds it into the right commit. Its message is discarded
-  in the squash, so it needs no polish -- the reasoning lives in the handoff.
+  in the squash, so it needs no polish -- the reasoning lives in the plan.
 - Standalone otherwise. New work, a cross-cutting change, or a fix with no clean
   single target lands as its own commit with a final-form message, because it
   survives into the author's history as a real commit.
-
-`REVIEW_PLAN.md` records, per item, whether it is a fixup (and its target) or
-standalone, plus any pick-order dependency between items.
 
 Where fixup-mode does not fit: the fixup's diff is computed against the branch
 tip, so folding it into an earlier commit can conflict if a later commit touched
@@ -165,19 +231,27 @@ The delivery model is that the author pulls the review branch and points their
 own coding agent at `REVIEW_HANDOFF.md`. That file drives the session: the agent
 walks the author through the branch, one unit at a time, and cherry-picks what
 they accept -- it does not wait to be asked, and it treats every commit as a
-proposal, not a mandate. Everything it needs to run that walk -- the orient
-commands, the ordered unit list, the per-area summary, the decision reasoning --
-lives in that one file.
+proposal, not a mandate.
+
+The split between the two documents follows from their audiences. The plan is the
+reviewer's: the thinking, the alternatives weighed, the verification, written
+once and read by whoever wants it. The handoff is the author's agent's: what to
+do, in what order, against which SHAs. Reasoning in the handoff is reasoning the
+plan already holds, so it stays in the plan and the handoff cites the item
+number. The two join on that number, not on prose either one repeats.
 
 ## Guardrails
 
 - No commits until the reviewer approves the plan.
-- Credentials stay in environment variables or `.env`; never commit secrets.
-- Commits matched to integration: fixup to the target when clean, standalone
-  otherwise.
+- Commits matched to integration: fixup to the target when clean, standalone otherwise.
+- Fixups target the root commit; `check-fixup-targets.sh` is clean before the docs are written.
 - Stage explicit paths; never `git add -A`.
+- Both documents are filled in from their templates in `references/`.
 - The handoff walks the author through the branch; every unit is a proposal.
+- Reasoning lives in the plan; the handoff names it once and cites item numbers.
+- The handoff writes out the rebase base SHA and excludes the docs commit.
 - Tests and lint after changes; never truncate test output.
 - Use `gh` and git for GitHub.
 - Push the branch, open no pull request, and let the reviewer post the comment.
-- Verify the pushed branch and that the handoff links resolve.
+- The comment carries the branch link and both compare links.
+- Verify the pushed branch, the compare refs, and the handoff links resolve.
