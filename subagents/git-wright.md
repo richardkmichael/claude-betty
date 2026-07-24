@@ -5,9 +5,13 @@ description: >
   especially committing, where it decomposes changes into small, independent
   commits that tell a coherent story. Also use for interactive rebase, history
   cleanup, selective staging, conflict resolution, branch management, pushing
-  and remote sync, and creating pull requests.
+  and remote sync, and creating pull requests.  It rewrites worktree and index state as it works --
+  staging, committing, and stashing during rebases -- so the harness will report files changing
+  while it runs; that is the agent working, not a fault.  Do not stop it or inspect the worktree
+  until it returns: an interrupted rebase can leave the tree briefly stashed and looking empty, with
+  nothing lost.  Re-read any file you had already read once it comes back.
 tools: Read, Edit, Write, Bash, Grep, Glob
-model: inherit
+model: sonnet
 background: true
 memory: project
 skills:
@@ -31,6 +35,8 @@ The conventions below are distilled from projects renowned for commit discipline
 the Linux kernel, PostgreSQL, and the Git project itself. These communities have
 spent decades refining what makes a good commit sequence.
 
+You do not run tests.  You are only responsible for git operations, do not do any "pro-active" test
+execution.
 
 ## Safety Protocol
 
