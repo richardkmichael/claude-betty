@@ -18,7 +18,8 @@ leaving comments and waiting for someone to re-derive the fixes, you deliver:
   behind each, and follow-ups;
 - `REVIEW_HANDOFF.md`, whose whole audience is the author's coding agent;
 - optional follow-up specs for work deliberately left out of scope; and
-- a drafted review comment linking the branch and its compare view.
+- a comment on the pull request introducing all of it to the author, with the one
+  command that starts their agent on the branch.
 
 The premise: the fastest way to discuss code is a diff plus a briefing the other
 side's agent can read.
@@ -152,7 +153,7 @@ you:
 Commit all the docs as one separate meta commit, clearly apart from the code
 fixes, so the author can drop or ignore them without touching the fixes.
 
-## 6. Publish
+## 6. Push the branch
 
 Push the branch and open no pull request:
 
@@ -164,42 +165,73 @@ GitHub cannot delete a pull request, so opening one would leave a closed PR in
 the repo's list after every review, for everyone else to filter out. A compare
 view gives the same side-by-side diff and commit list and leaves nothing behind.
 
-Draft -- but do not post -- the review comment. It points the author's agent at
-`REVIEW_HANDOFF.md` and carries three links:
+## 7. Write and post the review comment
 
-```
-https://github.com/<owner>/<repo>/tree/<review-branch>
-https://github.com/<owner>/<repo>/compare/pull/<N>/head...<review-branch>
-https://diffshub.com/<owner>/<repo>/compare/pull/<N>/head...<review-branch>
-```
+Fill in `references/REVIEW_COMMENT.template.md`. The comment is a high-level
+introduction for the author and their exact next step -- a command they can copy
+and paste, and summary prose. That is the whole job. The branch and the two
+documents are the review; the comment is what gets the author to them. Its four
+parts:
 
-The compare links show the review commits as a diff against the PR head, which
-is the proposed delta and the thing to read first; both hosts take the same path.
-Use this same `pull/<N>/head` form in the handoff's orient section -- one URL
-string across both documents. It tracks the PR as it advances, which is what the
-handoff already tells the reader to do when the branch has moved on; a form
-pinned to the review-time SHA would contradict that instruction.
-Say next to the diffshub link that it needs the reader's own GitHub fine-grained
-token in browser localStorage, so a reader without one knows why it will not
-load. For a local branch with no PR, compare against the branch itself:
-`compare/<branch>...<review-branch>`.
+- Claude kick-off is the literal command the author pastes to put their agent on
+  `REVIEW_HANDOFF.md`. It is first because it is the only thing the comment asks
+  them to do. It reads the handoff out of the ref -- `git fetch origin, then
+  follow git show origin/<review-branch>:REVIEW_HANDOFF.md` -- so the agent starts
+  without checking the branch out or leaving the author's own. Substitute the real
+  branch name; a placeholder that survives into the posted comment is not
+  copy-pasteable.
+- Review summary is the introduction: what the review found and what the author
+  has to deal with, in prose they can read in a minute. Lead with whatever they hit
+  first whichever units they take -- a hazard in the integration, a break the
+  rebase introduces, a conflict resolution that is correct but silently drops
+  something. Omit the section when the branch says everything.
+- Corrections on a branch states what the branch is, links the compare view, and
+  tables the units by the commit each one targets -- the author's own commit, not
+  the review commit's SHA, because the target is what tells them where the fix
+  lands. Two units aimed at one commit get two rows; a standalone unit has no
+  target.
+- The closing prose expands the one or two units whose point the author cannot get
+  from a one-liner, then links the two documents and states what the review was
+  based on and what it was not.
 
-Write the comment body to a file and hand the reviewer the command. A review
-that was requested belongs on the PR as a review submission with a verdict rather
-than a loose comment, so ask the reviewer which verdict:
+Summarize; do not reproduce. The table's one-liners plus the expansion of the
+substantive units is the whole budget. `REVIEW_PLAN.md` holds the reasoning, the
+alternatives weighed and the verification, and a comment that works through those
+leaves the author no reason to open the branch.
+
+The compare link is the plain URL, in `pull/<N>/head...<review-branch>` form --
+the same string the handoff's orient section uses. It shows the review commits as
+a diff against the PR head, which is the proposed delta and the thing to read
+first, and it tracks the PR as it advances, which is what the handoff already
+tells the reader to do when the branch has moved on; a form pinned to the
+review-time SHA would contradict that instruction. For a local branch with no PR,
+compare against the branch itself: `compare/<branch>...<review-branch>`.
+
+The two documents are linked as `blob/<review-branch>/FILE`. Nothing links the
+branch root -- the kick-off command names the branch and the blob links reach it.
+
+Write the body to a file outside the repository. It is not part of the docs
+commit, and posting from a file rather than an inline `--body` keeps the shell
+from mangling the fenced code blocks and the table.
+
+Show the reviewer the body and post it once they approve. A review that was
+requested belongs on the PR as a review submission with a verdict rather than a
+loose comment, so ask the reviewer which verdict:
 
 ```bash
 gh pr review <N> --request-changes --body-file <path>   # or --approve, --comment
 gh pr comment <N> --body-file <path>                    # when no review was requested
 ```
 
-Verify before handing it over: the branch is up, the compare refs resolve, and
-the doc links resolve. A branch name with a slash works in `tree/<branch>`,
-`blob/<branch>/FILE` and `compare/...` URLs, but confirm it rather than assume.
+Verify before posting: the branch is up, the compare refs resolve, and the doc
+links resolve. A branch name with a slash works in `blob/<branch>/FILE` and
+`compare/...` URLs, but confirm it rather than assume.
 
 ```bash
 gh api "repos/<owner>/<repo>/compare/pull/<N>/head...<review-branch>" --jq .status
 ```
+
+Report the posted comment's URL back to the reviewer.
 
 ## The commits are units of feedback
 
@@ -246,12 +278,16 @@ number. The two join on that number, not on prose either one repeats.
 - Commits matched to integration: fixup to the target when clean, standalone otherwise.
 - Fixups target the root commit; `check-fixup-targets.sh` is clean before the docs are written.
 - Stage explicit paths; never `git add -A`.
-- Both documents are filled in from their templates in `references/`.
+- All three deliverables are filled in from their templates in `references/`.
 - The handoff walks the author through the branch; every unit is a proposal.
 - Reasoning lives in the plan; the handoff names it once and cites item numbers.
 - The handoff writes out the rebase base SHA and excludes the docs commit.
 - Tests and lint after changes; never truncate test output.
 - Use `gh` and git for GitHub.
-- Push the branch, open no pull request, and let the reviewer post the comment.
-- The comment carries the branch link and both compare links.
-- Verify the pushed branch, the compare refs, and the handoff links resolve.
+- Push the branch and open no pull request.
+- The comment is an introduction and a next step: a copy-pasteable kick-off
+  command with the real branch name in it, and summary prose.
+- The comment summarizes; the plan's reasoning is not reproduced in it.
+- The comment's table keys each unit to the author's commit it targets.
+- Show the comment body, ask which verdict, and post only once approved.
+- Verify the pushed branch, the compare refs, and the doc links resolve.
