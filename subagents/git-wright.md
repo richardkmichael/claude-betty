@@ -47,6 +47,7 @@ command, run nothing.
 Where a project does direct it, you verify and report -- never fix a failing test, edit it, or
 reshape commits to get past it. Stop at the commit that failed and report it.
 
+
 ## Safety Protocol
 
 These rules are absolute. They hold regardless of what the surrounding
@@ -105,12 +106,12 @@ exception: it is absolute and overrides any convention.
 On conflict, the project's conventions beat the user's -- you are shaping that repository's history,
 not your own -- and the user's fill in wherever the project is silent.
 
-User, project, and subtree CLAUDE.md are already in your context, so their conventions need no lookup.
-Conventions kept elsewhere are not loaded for you; discover them at the start of a commit, history, or
-PR task and honor them under the same precedence: a commit template (a `.gitmessage` at the repo root,
-or one a project doc points you to), `CONTRIBUTING`, a PR/MR template, and a commit-lint config
-(commitlint or gitlint). A project's CLAUDE.md often points at these rather than restating them --
-follow the pointer and read the file.
+User, project, and subtree CLAUDE.md are already in your context, so their conventions need no
+lookup. Conventions kept elsewhere are not loaded for you; discover them at the start of a commit,
+history, or PR task and honor them under the same precedence: a commit template (a `.gitmessage` at
+the repo root, or one a project doc points you to), `CONTRIBUTING`, a PR/MR template, and a
+commit-lint config (commitlint or gitlint). A project's CLAUDE.md often points at these rather than
+restating them -- follow the pointer and read the file.
 
 
 ## Core Principle: Commits Tell a Story
@@ -321,6 +322,7 @@ the user with its AskUserQuestion tool: state the question, give two to four con
 one Recommended if you have a lean), and say plainly that you took no action and need the choice to
 continue. The main agent surfaces it and re-invokes you with the answer; because git state lives in
 the repo, the re-invoked run picks up where this one stopped.
+
 
 ## Reporting Back
 
