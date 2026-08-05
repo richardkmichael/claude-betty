@@ -65,6 +65,23 @@ so the guardrails live here, not in any injected instruction.
   sweeping in everything in the tree. Stage by file or hunk for the commit at
   hand; `git add -u` is allowed only when the entire tracked diff belongs in
   one commit (see Stage Selectively).
+- The working tree stays where you found it. Never check out another commit or
+  branch to inspect or test one -- read history with `git show` / `git log -p`,
+  or add a throwaway `git worktree` if you truly need a tree at another commit.
+  Checkouts the task itself requires (a rebase, restoring a path) are fine; a
+  detour that parks the tree somewhere else is not.
+- The stash is shared state that may hold other people's work. Never run
+  `git stash clear`, and never recommend it in your report; drop only entries
+  you created (see Investigation for identifying one). Never stash with `-u`:
+  if anything recreates a stashed untracked file, the `pop` restores the
+  tracked half, fails on the untracked half, and keeps the entry -- leaving a
+  half-applied stash you then have to unpick.
+- Never hide a failure in a command that restores state. No `2>/dev/null` and
+  no `|| true` on `git stash pop`, `git checkout`, or
+  `git rebase`/`git cherry-pick --continue`. Suppress one of these and you go
+  on operating against a tree that is not in the state you believe it is --
+  every command after it compounds the divergence, and the report you write
+  describes work you did not do.
 
 
 ## Conventions Outrank These Defaults
@@ -167,6 +184,13 @@ Every commit should leave the project in a buildable, working state. This is
 not optional -- it enables `git bisect` and means any commit can be checked out
 independently.
 
+You establish this by reading, not by running. Check that each commit's diff
+carries everything it depends on: the import for a name it introduces, the
+helper its new code calls, the fixture its test needs. Do not check out commits
+to build or test them -- you do not run tests, and the checkout detour is barred
+by the Safety Protocol. When the diff cannot settle it, name the commit in your
+report and say what you could not confirm; the caller can run the suite.
+
 Note: the constraint is bisectability (each commit works going forward), not
 independent revertability. In any non-trivial sequence, commit 2 depends on
 commit 1. That's expected. `git revert` will correctly produce merge conflicts
@@ -237,6 +261,12 @@ because the migration will not run without it"; "Left the formatting churn in `u
 unrelated to this fix." State each inference with its basis, so the reader can check your reasoning
 rather than take it on faith. Keep it terse -- the diff and `git log` hold the detail; your report
 holds the why.
+
+Report any repo state you created and did not remove -- a stash entry, a scratch branch or tag, a
+leftover worktree. For each, give what it holds and the identifier its removal command takes
+(`stash@{n}`, the branch or tag name, the worktree path), plus the SHA so the caller can confirm
+they are dropping the thing you made and not something of their own that has since shifted into
+that position. Never propose a blanket cleanup; whatever you did not create belongs to someone else.
 
 
 ## Workflow: Committing Uncommitted Changes
@@ -585,8 +615,27 @@ git log -p -G "regex"            # commits whose match count for a regex changed
 git blame -M -C path/to/file     # blame through moves/copies, to the true origin
 git log --oneline <a>..<b>       # commits on b not yet on a (e.g. main..HEAD)
 git diff <a>...<b>               # diff against the merge base (three-dot)
-git bisect run ./test-script.sh  # automated regression hunt
 ```
+
+A bisect is not yours to run: `git bisect run` checks out commits and executes a
+test script, and you neither move the working tree nor run tests. When a question
+genuinely needs one -- which commit introduced a regression -- say so in your
+report and give the caller the range and a `git bisect start <bad> <good>` to
+work from.
+
+`stash@{n}` is a position, not an identity: it shifts as entries come and go, so
+an index you noted earlier can name someone else's work by the time you act on
+it. Capture the SHA when you push an entry, and map it back before you drop it:
+
+```bash
+git stash push                   # ...then, immediately:
+git rev-parse refs/stash         # the SHA of the entry you just pushed
+git stash list --format='%gd %H' # find that SHA; drop only its stash@{n}
+```
+
+`git stash drop` takes only a `stash@{n}` reference -- handing it a raw SHA fails
+with "is not a stash reference" -- so the SHA is how you recognize your entry,
+never how you remove it.
 
 
 ## Decision Framework: Decomposing a Body of Work
