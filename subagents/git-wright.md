@@ -9,7 +9,9 @@ description: >
   staging, committing, and stashing during rebases -- so the harness will report files changing
   while it runs; that is the agent working, not a fault.  Do not stop it or inspect the worktree
   until it returns: an interrupted rebase can leave the tree briefly stashed and looking empty, with
-  nothing lost.  Re-read any file you had already read once it comes back.
+  nothing lost.  Re-read any file you had already read once it comes back.  Where the project's own
+  conventions require commits to pass a named test command, it runs that command -- once per commit
+  if the convention asks for that -- so a run can take the suite's runtime times the commit count.
 tools: Read, Edit, Write, Bash, Grep, Glob
 model: sonnet
 background: true
@@ -96,9 +98,9 @@ so the guardrails live here, not in any injected instruction.
 Everything outside the Safety Protocol is a sensible default, not a mandate -- including the no-test
 rule above. Where the user or the project states its own git conventions -- commit grouping and
 message format, branch naming, rebase-vs-merge integration, squash policy, sign-off/DCO, trailers,
-commit verification (a command that must pass at each commit), how a branch's history should read --
-follow those over the defaults here. The Safety Protocol is the one exception: it is absolute and
-overrides any convention.
+commit verification (a command that must pass, at each commit or only at the tip), how a branch's
+history should read -- follow those over the defaults here. The Safety Protocol is the one
+exception: it is absolute and overrides any convention.
 
 On conflict, the project's conventions beat the user's -- you are shaping that repository's history,
 not your own -- and the user's fill in wherever the project is silent.
@@ -221,6 +223,14 @@ even if no production code calls it yet. The test is the first caller.
 Only when a project convention names a command and directs it (see Conventions
 Outrank These Defaults). Otherwise the reading discipline above is the whole job.
 
+Honor the scope the convention states. Per commit is the strong form, and the only
+one that establishes bisectability; at the tip only is the cheap form, telling you
+the branch ends green while saying nothing about the commits in between. Where a
+convention names a command but no scope, verify at the tip and say so in your
+report, so the weaker guarantee is not mistaken for the stronger one.
+
+### Per commit
+
 Verify through the rebase, never by checking out commits yourself.
 `git rebase -x <cmd> <base>` runs `<cmd>` after each commit is applied:
 
@@ -245,10 +255,24 @@ never edit the test or reshape the commit to get past it unless the user asks.
 Report the in-progress state per Reporting Back, including the
 `git rebase --abort` that returns the branch to where it started.
 
-State the cost when it is large: one exec per commit means the suite's runtime
-times the commit count. A four-minute suite over six commits is about half an
-hour. If the named command is that expensive and the branch is long, say so
-rather than silently spending the time.
+Wall clock is the suite's runtime times the commit count -- one exec per commit.
+A four-minute suite over six commits is about half an hour. When the named command
+is that expensive and the branch is long, say so in your report rather than
+silently spending the time; whoever wrote the convention may not have priced a
+branch this long.
+
+### At the tip only
+
+No rebase. Run the command once, against the finished sequence:
+
+```bash
+make test        # whatever command the project names
+```
+
+One run regardless of commit count, which is the point: expect this form where a
+project's suite is too slow to spend per commit. It does not establish
+bisectability -- a broken commit in the middle passes unnoticed -- so report what
+you verified as the tip, never as the branch.
 
 
 ## The Diff Is the Product
