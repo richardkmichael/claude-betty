@@ -37,11 +37,14 @@ the commit named in Target. A standalone commit survives into the history with i
 
 ## For each unit, in pick order
 
-1. Read the matching numbered item in `REVIEW_PLAN.md` and explain to the author what the change is,
-   why it was proposed, and what alternatives were weighed. Answer their questions from that item.
+1. Read the matching numbered item in `git show origin/<review-branch>:REVIEW_PLAN.md` and explain
+   to the author what the change is, why it was proposed, and what alternatives were weighed. Answer
+   their questions from that item. Read it from the ref, not the working tree -- the review branch
+   might not be checked out.
 2. Show the diff: `git show <sha>`.
 3. Ask the author to take it or skip it.
-4. If taken, cherry-pick it onto their branch.
+4. If taken, cherry-pick it onto the author's branch. Check that is what is currently checked out --
+   if the review branch was checked out at some point to read from it, switch back before picking.
 
 Where a unit lists a dependency, raise that when you reach it: taking a unit whose predecessor was
 skipped may not apply cleanly, or may document something that does not exist.

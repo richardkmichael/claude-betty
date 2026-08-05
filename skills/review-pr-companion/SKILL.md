@@ -143,9 +143,11 @@ you:
 - Write the base SHA out literally in the rebase command. An agent that has to
   derive it can pick the PR head instead, and the rebase then folds nothing.
 - Mention `REVIEW_PLAN.md` exactly once, in the loop's first step, where the
-  template already does. That single instruction carries the whole document.
-  Repeating the pointer, or copying rationale and follow-ups back into the
-  handoff, is what makes the two files duplicate each other.
+  template already does, and name it through the ref rather than as a path. That
+  single instruction carries the whole document, and the kick-off command does not
+  check the branch out, so a bare filename is not guaranteed to resolve. Repeating
+  the pointer, or copying rationale and follow-ups back into the handoff, is what
+  makes the two files duplicate each other.
 - Name the docs commit and say it is not a unit. It is the reviewer's notes
   rather than a proposal, and an agent walking the branch will otherwise offer
   it as one more unit or fold it into the author's history.
