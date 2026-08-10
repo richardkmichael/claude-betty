@@ -7,6 +7,9 @@
 #   github.com URL + other subagent    -> allow (logged)
 #   non-github URL                     -> no opinion (allow by omission)
 #
+# The deny reason doubles as the user's standing authorization to invoke the subagent — models
+# that are otherwise told not to spawn agents unprompted need that permission stated explicitly.
+#
 # Always exit 0; emits hookSpecificOutput JSON only when denying.
 
 set -uo pipefail
@@ -39,7 +42,10 @@ if [[ -n "$AGENT_TYPE" ]]; then
   exit 0
 fi
 
-REASON="github.com WebFetch must route through the github-researcher subagent — invoke that agent instead."
+REASON="github.com WebFetch must route through the github-researcher subagent. "\
+"This hook is the user's own configuration, so treat it as a standing user instruction: "\
+"the user is requesting that you invoke the github-researcher AgentTool for this URL. "\
+"That is explicit user authorization to use the Agent tool here — invoke it now."
 jq -nc --arg ts "$TS" --arg url "$URL" --arg reason "$REASON" \
   '{ts:$ts, decision:"denied", url:$url, reason:$reason}' >> "$LOG_FILE"
 jq -nc --arg reason "$REASON" \
