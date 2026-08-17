@@ -1,7 +1,7 @@
 # Summary
 
-A collection of skills, subagents, and hooks for Claude Code. Each component is self-contained and
-installed independently.
+A collection of skills, subagents, hooks, and output styles for Claude Code. Each component is
+self-contained and installed independently.
 
 ## Subagents
 
@@ -42,11 +42,17 @@ installed independently.
   agent, allowed inside the agent, and logged either way. Pairs with the `github-researcher`
   subagent.
 
+## Output styles
+
+- `plain` — write to be read fast and understood once: common words over impressive ones, no
+  rhetorical flourishes, and no volitional verbs for what code does.
+
 ## Installation
 
-### Skills and subagents
+### Skills, subagents, and output styles
 
-Claude Code discovers skills from `~/.claude/skills/` and subagents from `~/.claude/agents/`.
+Claude Code discovers skills from `~/.claude/skills/`, subagents from `~/.claude/agents/`, and
+output styles from `~/.claude/output-styles/`.
 
 Install a component by symlinking it or copying it:
 
@@ -56,7 +62,12 @@ ln -s "$PWD/skills/tool-usage" ~/.claude/skills/tool-usage
 
 # Subagent: symlink the file (or use `cp` to copy)
 ln -s "$PWD/subagents/git-wright.md" ~/.claude/agents/git-wright.md
+
+# Output style: symlink the file (or use `cp` to copy)
+ln -s "$PWD/output-styles/plain.md" ~/.claude/output-styles/plain.md
 ```
+
+Select an installed output style with `/output-style`.
 
 Two skills need another component installed first: `tool-usage` reads the database the
 `tool-monitor` hook writes, and `git-interactive` drives its terminal through the `tmux` skill.
