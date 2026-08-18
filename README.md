@@ -1,7 +1,7 @@
 # Summary
 
-A collection of skills, subagents, hooks, and output styles for Claude Code. Each component is
-self-contained and installed independently.
+A collection of skills, subagents, hooks, output styles, and a status line for Claude Code. Each
+component is self-contained and installed independently.
 
 ## Subagents
 
@@ -46,6 +46,15 @@ self-contained and installed independently.
 
 - `plain` — write to be read fast and understood once: common words over impressive ones, no
   rhetorical flourishes, and no volitional verbs for what code does.
+
+## Status line
+
+- `statusline.py` — a three-section status line: context and rate-limit gauges on the left, a
+  pull-request badge in the centre, and account, model, and effort level on the right. Context is
+  measured against the auto-compaction threshold, so 100% is the point the session gets compacted
+  rather than the point the context window fills. When the line will not fit the terminal, the
+  least important items are dropped one at a time instead of letting the terminal truncate at an
+  arbitrary column. Standard library only.
 
 ## Installation
 
@@ -111,3 +120,34 @@ matched to the `github-researcher` agent. Place both scripts where Claude Code c
 ```
 
 Pair it with the `github-researcher` subagent so denied main-thread fetches have somewhere to route.
+
+### Status line
+
+`statusline.py` reads the status line payload on stdin and prints one line. Place it where Claude
+Code can run it, then point `settings.json` at it:
+
+```
+ln -s "$PWD/statusline/statusline.py" ~/.claude/statusline.py
+```
+
+```json
+{
+  "statusLine": {
+    "type": "command",
+    "command": "~/.claude/statusline.py",
+    "padding": 2
+  }
+}
+```
+
+The script draws its own pull-request badge, so set `prStatusFooterEnabled` to `false` in
+`settings.json` to drop the duplicate from Claude Code's footer. `ACCOUNT_LABELS` near the top of
+the file maps an email address to the account name shown for it. The module docstring covers the
+environment variables that tune width detection, including the column ruler used to measure how
+many columns the host's own chrome occupies.
+
+To combine it with another status line producer, pipe that producer into it:
+
+```
+"command": "other-producer | ~/.claude/statusline.py"
+```
