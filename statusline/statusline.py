@@ -192,7 +192,7 @@ def terminal_width():
         return 0
 
 
-DEFAULT_PADDING = 2
+DEFAULT_PADDING = 0       # what the host applies when statusLine.padding is unset
 
 
 def status_padding():
