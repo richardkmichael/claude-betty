@@ -108,6 +108,14 @@ def until(epoch):
     return f"↻{m}m"
 
 
+def tokens(n):
+    """Compact token count, e.g. 735K or 1M."""
+    if n < 1_000_000:
+        return f"{round(n / 1000)}K"
+    m = n / 1_000_000
+    return f"{m:.1f}M" if m % 1 else f"{m:.0f}M"
+
+
 ACCOUNT_LABELS = {
     # Map your own names here; otherwise the org name or "Personal" is used.
 }
@@ -142,7 +150,7 @@ COMPACT_FLOOR = 13000     # auto-compaction fires this far below the usable wind
 
 
 def compact_threshold(size):
-    """Tokens at which auto-compaction fires, or 0 if it cannot be worked out.
+    """(tokens at which auto-compaction fires, whether the env override set that figure).
 
         usable    = context_window_size - min(max_output_tokens, 20000)
         threshold = min(floor(usable * pct/100), usable - 13000)   # pct set
@@ -152,16 +160,19 @@ def compact_threshold(size):
     question nobody has. What matters is how close the session is to being compacted, and that
     happens well before the window fills. Both constants are read out of the bundle, so they are
     worth re-checking after an upgrade.
+
+    The second element is true only when the override is the binding constraint, not merely set: at
+    a high enough percentage the built-in floor is the lower of the two and the override changes
+    nothing, so labelling the threshold as configured would be wrong.
     """
     if not size:
-        return 0
+        return 0, False
     max_out = env_num("CLAUDE_CODE_MAX_OUTPUT_TOKENS", OUTPUT_RESERVE)
     usable = size - min(max_out, OUTPUT_RESERVE)
-    threshold = usable - COMPACT_FLOOR
+    built_in = usable - COMPACT_FLOOR
     pct = env_num("CLAUDE_AUTOCOMPACT_PCT_OVERRIDE", 0, float)
-    if 0 < pct <= 100:
-        threshold = min(int(usable * pct / 100), threshold)
-    return max(0, threshold)
+    threshold = min(int(usable * pct / 100), built_in) if 0 < pct <= 100 else built_in
+    return max(0, threshold), threshold < built_in
 
 
 def terminal_width():
@@ -244,11 +255,16 @@ def build(data):
     # the moment the window is full. Falls back to the payload's own figure when the tokens are
     # missing, which is the case before the first API response.
     used = cw.get("total_input_tokens") or 0
-    thresh = compact_threshold(size)
+    thresh, configured = compact_threshold(size)
     ctx = (round(used / thresh * 100) if used and thresh > 0
            else int(cw.get("used_percentage") or 0))
-    tag = " 1M" if size > 400_000 else ""
-    add("ctx", LEFT, f"ctx {ctx}%{tag}")
+    # The percent is against the threshold, so the threshold is the denominator shown -- a percent
+    # of a number the reader cannot see is not checkable. The window follows it because the pair is
+    # what says how much of the model has been given away, and AC marks a threshold the environment
+    # set rather than the built-in floor.
+    scale = (f" {'AC ' if configured else ''}{tokens(thresh)}/{tokens(size)}"
+             if thresh and size else "")
+    add("ctx", LEFT, f"ctx {ctx}%{scale}")
 
     limits = g("rate_limits") or {}
     for key, short in (("five_hour", "5h"), ("seven_day", "7d")):
