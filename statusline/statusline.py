@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-"""A Claude Code status line: context, plan quota, account, PR and model.
+"""A Claude Code status line: context, plan and per-model quota, account, PR and model.
 
 Point settings.json at it:
 
@@ -29,11 +29,14 @@ Environment:
                               Defaults to 4; raise it if the end of the line is clipped.
     CLAUDE_STATUSLINE_RULER   set to anything to emit a column ruler ending in '#', which is how
                               you measure the value above.
-    CLAUDE_CONFIG_DIR         honoured when locating .claude.json for the account label.
+    CLAUDE_CONFIG_DIR         honoured when locating .claude.json for the account label and the
+                              per-model quota windows.
     COLUMNS                   overrides terminal width detection.
 
-Reads only the payload on stdin and .claude.json, the latter for the account label because the
-payload does not carry one. Writes nothing, keeps no state.
+Reads only the payload on stdin and .claude.json. That file supplies the account label, which the
+payload does not carry, and Claude Code's cached copy of the usage endpoint, which is where the
+per-model quota windows live -- the payload's rate_limits covers the plan's own five-hour and
+seven-day windows and nothing else. Writes nothing, keeps no state, never touches the network.
 
 Available data: https://code.claude.com/docs/en/statusline#available-data
 Note that `cost` and `exceeds_200k_tokens` are present in the payload but absent from the
@@ -44,6 +47,7 @@ blanks the line with no error shown. So this script catches everything and alway
 something -- an ugly status line beats an invisible one.
 """
 
+import datetime
 import json
 import os
 import re
@@ -108,6 +112,20 @@ def until(epoch):
     return f"↻{m}m"
 
 
+def iso_epoch(s):
+    """Epoch seconds for an ISO 8601 timestamp, or 0 when it is absent or unparseable.
+
+    The plan windows in the payload carry epoch integers, but the usage endpoint answers in ISO
+    8601, so the two have to be brought to the same units before until() can format either.
+    """
+    if not isinstance(s, str):
+        return 0
+    try:
+        return datetime.datetime.fromisoformat(s.replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return 0
+
+
 def tokens(n):
     """Compact token count, e.g. 735K or 1M."""
     if n < 1_000_000:
@@ -151,6 +169,50 @@ def claude_account(cfg):
     if org.endswith("'s Organization"):
         return "Personal"
     return email.split("@")[0]
+
+
+USAGE_MAX_AGE = 3600      # Claude Code discards its own cached usage figures at this age
+
+
+def model_windows(cfg):
+    """[(model name, percent used, epoch it resets)] for each per-model quota window.
+
+    Some plans meter a model against its own allowance as well as the plan's. That allowance runs
+    out well before the seven-day plan window does, so the plan gauge alone gives a reassuring
+    number right up to the point the model stops answering. The payload's rate_limits carries only
+    the five-hour and seven-day plan windows, and no per-model figure reaches this script any other
+    way.
+
+    Claude Code polls the usage endpoint and leaves the answer in .claude.json under
+    cachedUsageUtilization, which is what makes this affordable: the figures are already on disk in
+    a file that is being parsed anyway, so nothing here goes near the network or the Keychain.
+
+    Two guards, both matching how Claude Code treats the same cache. It is dropped once it is an
+    hour old, because a quota figure that is quietly out of date is worse than no figure at all.
+    And it is dropped when it was written for a different account, since a percentage belonging to
+    someone else's quota is the one number that must never appear beside the account label.
+
+    Windows are returned least-used first. Every one of them shares a place in DROP_ORDER, so on a
+    narrow terminal the list is trimmed from the front, and the window closest to running out is
+    the last to go.
+    """
+    cache = cfg.get("cachedUsageUtilization") or {}
+    if cache.get("accountUuid") != (cfg.get("oauthAccount") or {}).get("accountUuid"):
+        return []
+    age = time.time() - (cache.get("fetchedAtMs") or 0) / 1000
+    if not 0 <= age <= USAGE_MAX_AGE:
+        return []
+    # The schema does not stop a model appearing under more than one window. Only the tightest is
+    # worth a slot on the line, and its reset time is what says which window that slot is showing.
+    worst = {}
+    for limit in (cache.get("utilization") or {}).get("limits") or []:
+        name = (((limit.get("scope") or {}).get("model") or {}).get("display_name") or "").strip()
+        pct = limit.get("percent")
+        if not name or not isinstance(pct, (int, float)):
+            continue
+        if name not in worst or pct > worst[name][0]:
+            worst[name] = (pct, iso_epoch(limit.get("resets_at")))
+    return sorted(((n, p, r) for n, (p, r) in worst.items()), key=lambda w: w[1])
 
 
 OUTPUT_RESERVE = 20000    # min(max_output_tokens, 20000) is held back for the reply
@@ -244,7 +306,7 @@ LEFT, CENTRE, RIGHT = 0, 1, 2
 SEPARATORS = (" · ", " · ", " | ")
 
 # Drop order when the line will not fit: the first name goes first.
-DROP_ORDER = ("dirs", "think", "effort", "pr", "7d", "account", "5h", "ctx", "model")
+DROP_ORDER = ("dirs", "think", "effort", "pr", "7d", "model_quota", "account", "5h", "ctx", "model")
 
 
 def build(data):
@@ -283,6 +345,13 @@ def build(data):
         pct = int(w.get("used_percentage") or 0)
         left = until(w.get("resets_at"))
         add(short, LEFT, f"{short} {pct}% {left}" if left else f"{short} {pct}%")
+
+    # Lower-cased to read as a gauge alongside 5h and 7d rather than as a second model name; the
+    # one on the right is what is answering, this is what it is spending.
+    for name, pct, reset in model_windows(cfg):
+        gauge = f"{name.lower()} {int(pct)}%"
+        left = until(reset)
+        add("model_quota", LEFT, f"{gauge} {left}" if left else gauge)
 
     # ── Centre: where ─────────────────────────────────────────────────────────
     pr = g("pr") or {}
