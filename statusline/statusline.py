@@ -121,19 +121,27 @@ ACCOUNT_LABELS = {
 }
 
 
-def claude_account():
-    """Which account this config dir is authenticated as; the payload does not say.
+def claude_config():
+    """Parsed .claude.json for this config dir, or {} when it cannot be read.
 
-    The identity lives in plaintext in the config JSON, the credential itself being in the Keychain.
     Re-read every render rather than cached: the file is around half a megabyte and parses in a few
     milliseconds against roughly 25 for the whole line, so a cache would buy a fraction of one
     render while adding a staleness window in which an account switch shows the wrong name -- the
-    one moment the label matters.
+    one moment the label matters. Parsed once and handed to both readers below, since parsing it
+    twice would double the only measurable cost this script has.
     """
-    cfg = os.path.join(os.environ.get("CLAUDE_CONFIG_DIR", HOME), ".claude.json")
-    if not os.path.exists(cfg):
-        cfg = os.path.join(HOME, ".claude.json")
-    a = read_json(cfg).get("oauthAccount") or {}
+    path = os.path.join(os.environ.get("CLAUDE_CONFIG_DIR", HOME), ".claude.json")
+    if not os.path.exists(path):
+        path = os.path.join(HOME, ".claude.json")
+    return read_json(path)
+
+
+def claude_account(cfg):
+    """Which account this config dir is authenticated as; the payload does not say.
+
+    The identity lives in plaintext in the config JSON, the credential itself being in the Keychain.
+    """
+    a = cfg.get("oauthAccount") or {}
     email, org = a.get("emailAddress", ""), a.get("organizationName", "")
     label = ACCOUNT_LABELS.get(email)
     if label:
@@ -242,6 +250,7 @@ DROP_ORDER = ("dirs", "think", "effort", "pr", "7d", "account", "5h", "ctx", "mo
 def build(data):
     """Return [(priority, section, text)], priority being the item's place in DROP_ORDER."""
     g = data.get
+    cfg = claude_config()
     out = []
 
     def add(name, section, text):
@@ -289,7 +298,7 @@ def build(data):
     # ── Right: what is answering, and on whose quota ──────────────────────────
     # The payload never says which account is authenticated, and mistaking one for the other means
     # spending the wrong quota -- so this outranks the repo and PR badges.
-    add("account", RIGHT, claude_account())
+    add("account", RIGHT, claude_account(cfg))
 
     add("model", RIGHT, (g("model") or {}).get("display_name"))
     add("effort", RIGHT, (g("effort") or {}).get("level"))
