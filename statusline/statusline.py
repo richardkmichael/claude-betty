@@ -171,10 +171,30 @@ def claude_account(cfg):
     return email.split("@")[0]
 
 
-USAGE_MAX_AGE = 3600      # Claude Code discards its own cached usage figures at this age
+STALE_MARK = 900          # past this the refresh has plainly failed, so mark the figure
 
 
-def model_windows(cfg):
+def usage_cache(cfg):
+    """(cached usage figures, age in seconds), or ({}, 0) when they cannot be trusted at all.
+
+    Claude Code polls the usage endpoint and leaves the answer in .claude.json under
+    cachedUsageUtilization, which is what makes the per-model gauge affordable: the figures are
+    already on disk in a file that is being parsed anyway.
+
+    The one guard applied here is the account. A percentage belonging to someone else's quota is
+    the number that must never appear beside the account label, so a cache written under a
+    different login is discarded outright rather than shown or refreshed. Age is returned rather
+    than judged, because how old is too old differs between the caller that renders a figure and
+    the caller that decides whether to fetch a new one.
+    """
+    cache = cfg.get("cachedUsageUtilization") or {}
+    if not cache or cache.get("accountUuid") != (cfg.get("oauthAccount") or {}).get("accountUuid"):
+        return {}, 0
+    age = time.time() - (cache.get("fetchedAtMs") or 0) / 1000
+    return cache, max(0, age)
+
+
+def model_windows(cache):
     """[(model name, percent used, epoch it resets)] for each per-model quota window.
 
     Some plans meter a model against its own allowance as well as the plan's. That allowance runs
@@ -183,35 +203,25 @@ def model_windows(cfg):
     the five-hour and seven-day plan windows, and no per-model figure reaches this script any other
     way.
 
-    Claude Code polls the usage endpoint and leaves the answer in .claude.json under
-    cachedUsageUtilization, which is what makes this affordable: the figures are already on disk in
-    a file that is being parsed anyway, so nothing here goes near the network or the Keychain.
-
-    Two guards, both matching how Claude Code treats the same cache. It is dropped once it is an
-    hour old, because a quota figure that is quietly out of date is worse than no figure at all.
-    And it is dropped when it was written for a different account, since a percentage belonging to
-    someone else's quota is the one number that must never appear beside the account label.
+    A window whose reset has passed is dropped. Age alone is not grounds for that: a weekly figure
+    moves slowly, so an old reading is roughly right and worth showing marked. A reading from a
+    window that has since rolled over is not old but wrong, and the percentage it reports belongs
+    to a week that has already ended.
 
     Windows are returned least-used first. Every one of them shares a place in DROP_ORDER, so on a
     narrow terminal the list is trimmed from the front, and the window closest to running out is
     the last to go.
     """
-    cache = cfg.get("cachedUsageUtilization") or {}
-    if cache.get("accountUuid") != (cfg.get("oauthAccount") or {}).get("accountUuid"):
-        return []
-    age = time.time() - (cache.get("fetchedAtMs") or 0) / 1000
-    if not 0 <= age <= USAGE_MAX_AGE:
-        return []
     # The schema does not stop a model appearing under more than one window. Only the tightest is
     # worth a slot on the line, and its reset time is what says which window that slot is showing.
     worst = {}
     for limit in (cache.get("utilization") or {}).get("limits") or []:
         name = (((limit.get("scope") or {}).get("model") or {}).get("display_name") or "").strip()
-        pct = limit.get("percent")
-        if not name or not isinstance(pct, (int, float)):
+        pct, reset = limit.get("percent"), iso_epoch(limit.get("resets_at"))
+        if not name or not isinstance(pct, (int, float)) or 0 < reset <= time.time():
             continue
         if name not in worst or pct > worst[name][0]:
-            worst[name] = (pct, iso_epoch(limit.get("resets_at")))
+            worst[name] = (pct, reset)
     return sorted(((n, p, r) for n, (p, r) in worst.items()), key=lambda w: w[1])
 
 
@@ -348,8 +358,10 @@ def build(data):
 
     # Lower-cased to read as a gauge alongside 5h and 7d rather than as a second model name; the
     # one on the right is what is answering, this is what it is spending.
-    for name, pct, reset in model_windows(cfg):
-        gauge = f"{name.lower()} {int(pct)}%"
+    cache, age = usage_cache(cfg)
+    stale = age > STALE_MARK
+    for name, pct, reset in model_windows(cache):
+        gauge = f"{name.lower()} {'STL' if stale else str(int(pct)) + '%'}"
         left = until(reset)
         add("model_quota", LEFT, f"{gauge} {left}" if left else gauge)
 
