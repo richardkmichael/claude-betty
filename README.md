@@ -52,9 +52,11 @@ component is self-contained and installed independently.
 - `statusline.py` — a three-section status line: context and rate-limit gauges on the left, a
   pull-request badge in the centre, and account, model, and effort level on the right. Context is
   measured against the auto-compaction threshold, so 100% is the point the session gets compacted
-  rather than the point the context window fills. When the line will not fit the terminal, the
-  least important items are dropped one at a time instead of letting the terminal truncate at an
-  arbitrary column. Standard library only.
+  rather than the point the context window fills. Where a plan meters a model against its own
+  weekly allowance, that window gets a gauge of its own beside the plan's, because the plan gauge
+  alone reads reassuringly right up to the point the model stops answering. When the line will not
+  fit the terminal, the least important items are dropped one at a time instead of letting the
+  terminal truncate at an arbitrary column. Standard library only.
 
 ## Installation
 
@@ -145,6 +147,15 @@ The script draws its own pull-request badge, so set `prStatusFooterEnabled` to `
 the file maps an email address to the account name shown for it. The module docstring covers the
 environment variables that tune width detection, including the column ruler used to measure how
 many columns the host's own chrome occupies.
+
+One thing to know before installing it: the per-model gauge reads figures Claude Code caches from
+its usage endpoint, and nothing refreshes those on a schedule — they are written only when
+`/usage` runs. So once they pass six minutes old, a render starts `claude -p /usage` in the
+background to replace them. That command costs no tokens and starts no session, the spawn is
+detached so no render ever waits on it, and a lock file in the temp directory keeps concurrent
+sessions to one refresh between them. A figure too old to trust reads `STL` in place of the
+percentage rather than quietly showing a stale number. This is the only part of the script that
+reaches beyond reading a file, and it is confined to one function.
 
 To combine it with another status line producer, pipe that producer into it:
 
