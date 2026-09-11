@@ -33,10 +33,17 @@ Environment:
                               per-model quota windows.
     COLUMNS                   overrides terminal width detection.
 
-Reads only the payload on stdin and .claude.json. That file supplies the account label, which the
+Reads the payload on stdin and .claude.json. That file supplies the account label, which the
 payload does not carry, and Claude Code's cached copy of the usage endpoint, which is where the
 per-model quota windows live -- the payload's rate_limits covers the plan's own five-hour and
-seven-day windows and nothing else. Writes nothing, keeps no state, never touches the network.
+seven-day windows and nothing else.
+
+Nothing in Claude Code refreshes those cached figures on a schedule; they are written only when
+`/usage` runs. So once they age out this script starts `claude -p /usage` in the background to
+replace them, which is the one thing here that reaches beyond reading a file: it touches the
+network indirectly, and it keeps a lock file in the temp directory to stop every render of every
+open session spawning its own. Both are confined to refresh_usage below. A figure too old to trust
+is still shown, reading STL in place of the percentage, rather than hidden.
 
 Available data: https://code.claude.com/docs/en/statusline#available-data
 Note that `cost` and `exceeds_200k_tokens` are present in the payload but absent from the
@@ -48,10 +55,14 @@ something -- an ugly status line beats an invisible one.
 """
 
 import datetime
+import hashlib
 import json
 import os
 import re
+import shutil
+import subprocess
 import sys
+import tempfile
 import time
 
 # ── helpers ───────────────────────────────────────────────────────────────────
@@ -139,6 +150,15 @@ ACCOUNT_LABELS = {
 }
 
 
+def config_dir():
+    """Directory Claude Code keeps this account's state in; the home directory by default.
+
+    Named separately from the file below because the directory identifies the account on its own,
+    which is what keeps one account's refresh from blocking another's.
+    """
+    return os.environ.get("CLAUDE_CONFIG_DIR") or HOME
+
+
 def claude_config():
     """Parsed .claude.json for this config dir, or {} when it cannot be read.
 
@@ -148,7 +168,7 @@ def claude_config():
     one moment the label matters. Parsed once and handed to both readers below, since parsing it
     twice would double the only measurable cost this script has.
     """
-    path = os.path.join(os.environ.get("CLAUDE_CONFIG_DIR", HOME), ".claude.json")
+    path = os.path.join(config_dir(), ".claude.json")
     if not os.path.exists(path):
         path = os.path.join(HOME, ".claude.json")
     return read_json(path)
@@ -171,6 +191,7 @@ def claude_account(cfg):
     return email.split("@")[0]
 
 
+REFRESH_AFTER = 360       # spawn a refresh once the cached figures are older than this
 STALE_MARK = 900          # past this the refresh has plainly failed, so mark the figure
 
 
@@ -192,6 +213,55 @@ def usage_cache(cfg):
         return {}, 0
     age = time.time() - (cache.get("fetchedAtMs") or 0) / 1000
     return cache, max(0, age)
+
+
+def refresh_usage(age):
+    """Start a detached `claude -p /usage` when the cached figures have aged out.
+
+    Nothing refreshes this cache on its own. Claude Code writes it from exactly one place, reached
+    only by `/usage` or an SDK request, so left alone the figures are stale almost always and fresh
+    for an hour after a command the user rarely runs. `/usage` in its non-interactive form fixes
+    that: it costs no tokens and starts no session, because it reads the usage endpoint and local
+    transcripts rather than calling a model.
+
+    The spawn is detached with its streams closed, so a render never waits on it and a failure --
+    offline, expired credentials -- costs nothing but the stale figure already on screen.
+
+    A lock file rate-limits the whole machine rather than this render. The line is drawn several
+    times a minute in every open session, so without one each of them would spawn its own refresh.
+    Claiming it with O_CREAT|O_EXCL makes the winner unambiguous when several renders race, and
+    nothing ever deletes it: its age is the record of when a refresh was last attempted, which is
+    what makes a failing refresh retry on the same slow cadence as a working one.
+
+    Keyed by config directory so switching accounts does not leave one waiting on the other's lock.
+
+    An absent or foreign cache is reported as age zero and so never triggers a fetch, which keeps
+    this off accounts that have no plan limits to fetch. The cost is that the gauge stays dark on a
+    machine that has never run `/usage` even once, until something else seeds the cache.
+    """
+    if age <= REFRESH_AFTER:
+        return
+    claude = shutil.which("claude") or os.path.join(HOME, ".local/bin/claude")
+    if not os.path.exists(claude):
+        return
+    key = hashlib.sha256(config_dir().encode()).hexdigest()[:12]
+    lock = os.path.join(tempfile.gettempdir(), f"claude-statusline-usage-{key}.lock")
+    try:
+        if time.time() - os.stat(lock).st_mtime <= REFRESH_AFTER:
+            return                         # a refresh was attempted recently enough
+        os.unlink(lock)
+    except OSError:
+        pass                               # absent, or already taken by a racing render
+    try:
+        os.close(os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600))
+    except OSError:
+        return                             # another render claimed it first
+    try:
+        subprocess.Popen([claude, "-p", "/usage"], stdin=subprocess.DEVNULL,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                         start_new_session=True, close_fds=True)
+    except OSError:
+        pass
 
 
 def model_windows(cache):
@@ -358,12 +428,18 @@ def build(data):
 
     # Lower-cased to read as a gauge alongside 5h and 7d rather than as a second model name; the
     # one on the right is what is answering, this is what it is spending.
+    #
+    # STL replaces the reading rather than qualifying it. A figure this old is one the refresh
+    # below should already have replaced, so the honest report is that the number is unknown
+    # rather than a number carrying a warning, which still invites being read. It is the width of
+    # the percentage it stands in for, so the line does not shift as it comes and goes.
     cache, age = usage_cache(cfg)
     stale = age > STALE_MARK
     for name, pct, reset in model_windows(cache):
         gauge = f"{name.lower()} {'STL' if stale else str(int(pct)) + '%'}"
         left = until(reset)
         add("model_quota", LEFT, f"{gauge} {left}" if left else gauge)
+    refresh_usage(age)
 
     # ── Centre: where ─────────────────────────────────────────────────────────
     pr = g("pr") or {}
