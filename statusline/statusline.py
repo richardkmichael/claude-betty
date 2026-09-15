@@ -40,12 +40,15 @@ payload does not carry, and Claude Code's cached copy of the usage endpoint, whi
 per-model quota windows live -- the payload's rate_limits covers the plan's own five-hour and
 seven-day windows and nothing else.
 
-Nothing in Claude Code refreshes those cached figures on a schedule; they are written only when
-`/usage` runs. So once they age out this script starts `claude -p /usage` in the background to
-replace them, which is the one thing here that reaches beyond reading a file: it touches the
-network indirectly, and it keeps a lock file in the temp directory to stop every render of every
-open session spawning its own. Both are confined to refresh_usage below. A figure too old to trust
-is still shown, reading STL in place of the percentage, rather than hidden.
+Nothing in Claude Code refreshes those cached figures on a schedule. They are written only when
+`/usage` runs, and `/login` clears them outright as part of logging the old account out. So when
+they age out, go missing or turn out to belong to another account, this script starts
+`claude -p /usage` in the background to replace them, which is the one thing here that reaches
+beyond reading a file: it touches the network indirectly, and it keeps a lock file in the temp
+directory to stop every render of every open session spawning its own. A cache that is missing is
+refreshed only when the payload carries rate_limits, which is what says the account has plan limits
+worth fetching. Both the spawn and the lock are confined to refresh_usage below. A figure too old
+to trust is still shown, reading STL in place of the percentage, rather than hidden.
 
 Available data: https://code.claude.com/docs/en/statusline#available-data
 Note that `cost` and `exceeds_200k_tokens` are present in the payload but absent from the
@@ -59,6 +62,7 @@ something -- an ugly status line beats an invisible one.
 import datetime
 import hashlib
 import json
+import math
 import os
 import re
 import shutil
@@ -153,10 +157,11 @@ ACCOUNT_LABELS = {
 
 
 def config_dir():
-    """Directory Claude Code keeps this account's state in; the home directory by default.
+    """Directory Claude Code keeps its state in; the home directory by default.
 
-    Named separately from the file below because the directory identifies the account on its own,
-    which is what keeps one account's refresh from blocking another's.
+    Named separately from the file below because the refresh lock is keyed by the directory rather
+    than by the file. The directory does not identify the account on its own, since one directory
+    serves whichever account is logged in, so the account uuid is keyed alongside it.
     """
     return os.environ.get("CLAUDE_CONFIG_DIR") or HOME
 
@@ -174,6 +179,15 @@ def claude_config():
     if not os.path.exists(path):
         path = os.path.join(HOME, ".claude.json")
     return read_json(path)
+
+
+def account_uuid(cfg):
+    """Claude Code's own identifier for the account this config dir is authenticated as, or None.
+
+    The uuid rather than the email address, because it is what the cached usage figures are stamped
+    with, so it is the value both the cache check and the lock key below have to compare against.
+    """
+    return (cfg.get("oauthAccount") or {}).get("accountUuid")
 
 
 def claude_account(cfg):
@@ -198,7 +212,7 @@ STALE_MARK = 900          # past this the refresh has plainly failed, so mark th
 
 
 def usage_cache(cfg):
-    """(cached usage figures, age in seconds), or ({}, 0) when they cannot be trusted at all.
+    """(cached usage figures, age in seconds), or ({}, inf) when they cannot be trusted at all.
 
     Claude Code polls the usage endpoint and leaves the answer in .claude.json under
     cachedUsageUtilization, which is what makes the per-model gauge affordable: the figures are
@@ -206,25 +220,31 @@ def usage_cache(cfg):
 
     The one guard applied here is the account. A percentage belonging to someone else's quota is
     the number that must never appear beside the account label, so a cache written under a
-    different login is discarded outright rather than shown or refreshed. Age is returned rather
-    than judged, because how old is too old differs between the caller that renders a figure and
-    the caller that decides whether to fetch a new one.
+    different login is discarded outright rather than shown. Age is returned rather than judged,
+    because how old is too old differs between the caller that renders a figure and the caller that
+    decides whether to fetch a new one.
+
+    A cache that is absent or discarded is reported as infinitely old, which is the literal truth:
+    there is no reading here of any age. That answer also serves both callers without a special
+    case for it. Nothing is drawn, because there are no windows to draw from, and a refresh is owed,
+    because the oldest possible reading is older than any threshold that could be set against it.
     """
     cache = cfg.get("cachedUsageUtilization") or {}
-    if not cache or cache.get("accountUuid") != (cfg.get("oauthAccount") or {}).get("accountUuid"):
-        return {}, 0
+    if not cache or cache.get("accountUuid") != account_uuid(cfg):
+        return {}, math.inf
     age = time.time() - (cache.get("fetchedAtMs") or 0) / 1000
     return cache, max(0, age)
 
 
-def refresh_usage(age):
-    """Start a detached `claude -p /usage` when the cached figures have aged out.
+def refresh_usage(age, has_limits, account):
+    """Start a detached `claude -p /usage` when the cached figures need replacing.
 
     Nothing refreshes this cache on its own. Claude Code writes it from exactly one place, reached
-    only by `/usage` or an SDK request, so left alone the figures are stale almost always and fresh
-    for an hour after a command the user rarely runs. `/usage` in its non-interactive form fixes
-    that: it costs no tokens and starts no session, because it reads the usage endpoint and local
-    transcripts rather than calling a model.
+    only by `/usage` or an SDK request, and `/login` clears it as part of logging the old account
+    out, so left alone the figures are stale almost always and fresh for an hour after a command
+    the user rarely runs. `/usage` in its non-interactive form fixes that: it costs no tokens and
+    starts no session, because it reads the usage endpoint and local transcripts rather than
+    calling a model.
 
     The spawn is detached with its streams closed, so a render never waits on it and a failure --
     offline, expired credentials -- costs nothing but the stale figure already on screen.
@@ -235,18 +255,24 @@ def refresh_usage(age):
     nothing ever deletes it: its age is the record of when a refresh was last attempted, which is
     what makes a failing refresh retry on the same slow cadence as a working one.
 
-    Keyed by config directory so switching accounts does not leave one waiting on the other's lock.
+    The lock is keyed by config directory and account together, so an account switched to partway
+    through a session gets its first refresh straight away rather than waiting out the lock taken
+    for the account before it. A config carrying no account uuid keys on the directory alone.
 
-    An absent or foreign cache is reported as age zero and so never triggers a fetch, which keeps
-    this off accounts that have no plan limits to fetch. The cost is that the gauge stays dark on a
-    machine that has never run `/usage` even once, until something else seeds the cache.
+    has_limits reports whether the payload carried rate_limits, and it is the whole test for
+    whether a fetch is worth making: the block is present only on a subscription session, so an API
+    key, Bedrock or Vertex session has no plan limits to read and no cache age gets it here. Given
+    a subscription session, a cache that is missing or belongs to another account is as good a
+    reason to fetch as one that has aged out, which is what fills the gauge after `/login` and on a
+    machine that has never run `/usage` at all.
     """
-    if age <= REFRESH_AFTER:
+    if not has_limits or age <= REFRESH_AFTER:
         return
     claude = shutil.which("claude") or os.path.join(HOME, ".local/bin/claude")
     if not os.path.exists(claude):
         return
-    key = hashlib.sha256(config_dir().encode()).hexdigest()[:12]
+    identity = f"{config_dir()}\0{account}" if account else config_dir()
+    key = hashlib.sha256(identity.encode()).hexdigest()[:12]
     lock = os.path.join(tempfile.gettempdir(), f"claude-statusline-usage-{key}.lock")
     try:
         if time.time() - os.stat(lock).st_mtime <= REFRESH_AFTER:
@@ -484,7 +510,9 @@ def build(data):
         else:
             left = until(reset)
         add("model_quota", LEFT, f"{gauge} {left}" if left else gauge, WEEKLY if joined else None)
-    refresh_usage(age)
+    # The payload's rate_limits is the test for whether this account has plan limits at all, so it
+    # is what says a refresh is worth spawning, whatever state the cache is in.
+    refresh_usage(age, bool(limits), account_uuid(cfg))
 
     # ── Centre: where ─────────────────────────────────────────────────────────
     pr = g("pr") or {}
