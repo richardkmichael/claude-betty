@@ -118,10 +118,10 @@ def until(epoch):
         return ""
     secs = int(epoch - time.time())
     if secs < 60:
-        return "↻now"                      # sub-minute would floor to a meaningless "0m"
+        return "↻now"  # sub-minute would floor to a meaningless "0m"
     h, m = divmod(secs // 60, 60)
     if h >= 24:
-        return f"↻{h // 24}d{h % 24}h"      # minutes are noise a day out
+        return f"↻{h // 24}d{h % 24}h"  # minutes are noise a day out
     if h:
         # Minutes are kept inside a day: dropping them made 4h50m read as 4h, and being told you
         # have four hours when you have nearly five is wrong in the direction that matters.
@@ -207,8 +207,8 @@ def claude_account(cfg):
     return email.split("@")[0]
 
 
-REFRESH_AFTER = 360       # spawn a refresh once the cached figures are older than this
-STALE_MARK = 900          # past this the refresh has plainly failed, so mark the figure
+REFRESH_AFTER = 360  # spawn a refresh once the cached figures are older than this
+STALE_MARK = 900  # past this the refresh has plainly failed, so mark the figure
 
 
 def usage_cache(cfg):
@@ -276,18 +276,23 @@ def refresh_usage(age, has_limits, account):
     lock = os.path.join(tempfile.gettempdir(), f"claude-statusline-usage-{key}.lock")
     try:
         if time.time() - os.stat(lock).st_mtime <= REFRESH_AFTER:
-            return                         # a refresh was attempted recently enough
+            return  # a refresh was attempted recently enough
         os.unlink(lock)
     except OSError:
-        pass                               # absent, or already taken by a racing render
+        pass  # absent, or already taken by a racing render
     try:
         os.close(os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600))
     except OSError:
-        return                             # another render claimed it first
+        return  # another render claimed it first
     try:
-        subprocess.Popen([claude, "-p", "/usage"], stdin=subprocess.DEVNULL,
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                         start_new_session=True, close_fds=True)
+        subprocess.Popen(
+            [claude, "-p", "/usage"],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+            close_fds=True,
+        )
     except OSError:
         pass
 
@@ -327,8 +332,8 @@ def model_windows(cache):
     return sorted(((n, p, r) for n, (p, r) in worst.items()), key=lambda w: w[1])
 
 
-OUTPUT_RESERVE = 20000    # min(max_output_tokens, 20000) is held back for the reply
-COMPACT_FLOOR = 13000     # auto-compaction fires this far below the usable window by default
+OUTPUT_RESERVE = 20000  # min(max_output_tokens, 20000) is held back for the reply
+COMPACT_FLOOR = 13000  # auto-compaction fires this far below the usable window by default
 
 
 def compact_threshold(size):
@@ -374,7 +379,7 @@ def terminal_width():
         return 0
 
 
-DEFAULT_PADDING = 0       # what the host applies when statusLine.padding is unset
+DEFAULT_PADDING = 0  # what the host applies when statusLine.padding is unset
 
 
 def status_padding():
@@ -385,8 +390,9 @@ def status_padding():
     is not evident from the bundle, so this budgets for both -- overshooting costs two columns,
     undershooting costs the end of the line.
     """
-    cfg = os.path.join(os.environ.get("CLAUDE_CONFIG_DIR", os.path.join(HOME, ".claude")),
-                       "settings.json")
+    cfg = os.path.join(
+        os.environ.get("CLAUDE_CONFIG_DIR", os.path.join(HOME, ".claude")), "settings.json"
+    )
     try:
         pad = (read_json(cfg).get("statusLine") or {}).get("padding")
         return max(0, int(pad)) if pad is not None else DEFAULT_PADDING
@@ -425,8 +431,8 @@ SEPARATORS = (" | ", " | ", " | ")
 # independent, and that the reset marker written once at the end of the run covers all of them. It
 # is three columns wide, the same as the separator, so joining costs the layout nothing.
 SHARED_JOIN = " · "
-WEEKLY = "weekly"         # group tag for the gauges the plan's seven-day reset is shared across
-SAME_RESET = 60           # seconds apart within which two windows reset at the same instant
+WEEKLY = "weekly"  # group tag for the gauges the plan's seven-day reset is shared across
+SAME_RESET = 60  # seconds apart within which two windows reset at the same instant
 
 # Drop order when the line will not fit: the first name goes first.
 DROP_ORDER = ("dirs", "think", "effort", "pr", "7d", "model_quota", "account", "5h", "ctx", "model")
@@ -454,14 +460,14 @@ def build(data):
     # missing, which is the case before the first API response.
     used = cw.get("total_input_tokens") or 0
     thresh, configured = compact_threshold(size)
-    ctx = (round(used / thresh * 100) if used and thresh > 0
-           else int(cw.get("used_percentage") or 0))
+    ctx = round(used / thresh * 100) if used and thresh > 0 else int(cw.get("used_percentage") or 0)
     # The percent is against the threshold, so the threshold is the denominator shown -- a percent
     # of a number the reader cannot see is not checkable. The window follows it because the pair is
     # what says how much of the model has been given away, and AC marks a threshold the environment
     # set rather than the built-in floor.
-    scale = (f" {'AC ' if configured else ''}{tokens(thresh)}/{tokens(size)}"
-             if thresh and size else "")
+    scale = (
+        f" {'AC ' if configured else ''}{tokens(thresh)}/{tokens(size)}" if thresh and size else ""
+    )
     add("ctx", LEFT, f"ctx {ctx}%{scale}")
 
     # The per-model weekly windows reset at the same instant as the plan's seven-day window, so the
@@ -488,8 +494,12 @@ def build(data):
         # narrows, because DROP_ORDER takes 7d before any model gauge: the run outlives it.
         joined = short == "7d" and shared > 0
         left = "" if joined else until(w.get("resets_at"))
-        add(short, LEFT, f"{short} {pct}% {left}" if left else f"{short} {pct}%",
-            WEEKLY if joined else None)
+        add(
+            short,
+            LEFT,
+            f"{short} {pct}% {left}" if left else f"{short} {pct}%",
+            WEEKLY if joined else None,
+        )
 
     # Lower-cased to read as a gauge alongside 5h and 7d rather than as a second model name; the
     # one on the right is what is answering, this is what it is spending.
@@ -517,8 +527,9 @@ def build(data):
     # ── Centre: where ─────────────────────────────────────────────────────────
     pr = g("pr") or {}
     if pr.get("number"):
-        state = {"approved": "✓", "changes_requested": "✗",
-                 "pending": "…", "draft": "◌"}.get(pr.get("review_state"), "")
+        state = {"approved": "✓", "changes_requested": "✗", "pending": "…", "draft": "◌"}.get(
+            pr.get("review_state"), ""
+        )
         label = f"{state} PR {pr['number']}" if state else f"PR {pr['number']}"
         add("pr", CENTRE, link(label, pr.get("url")))
 
@@ -589,13 +600,12 @@ def main():
     try:
         data = json.load(sys.stdin)
     except Exception:
-        return ""                          # no payload: nothing sensible to draw
+        return ""  # no payload: nothing sensible to draw
     width = render_width()
     if os.environ.get("CLAUDE_STATUSLINE_RULER"):
         # Every tenth column is marked; the final column is '#'. Whether '#' survives tells you
         # exactly how many columns the host chrome is really taking.
-        return "".join(str(c // 10 % 10) if c % 10 == 0 else "."
-                       for c in range(1, width)) + "#"
+        return "".join(str(c // 10 % 10) if c % 10 == 0 else "." for c in range(1, width)) + "#"
     return fit(data, width)
 
 
