@@ -20,8 +20,10 @@ authenticated; the payload omits the block entirely otherwise, so a missing badg
 
 Three sections -- gauges left, workspace centre, model right. When the line will not fit, items are
 dropped one at a time in DROP_ORDER, because choosing what to lose beats letting the terminal
-truncate at an arbitrary point. ACCOUNT_LABELS maps an email address to the name shown for it; those
-two constants are the only things here meant to be edited.
+truncate at an arbitrary point. Items are divided by " | " throughout, except that gauges reporting
+one window take " · " between them and share a single reset marker, which is how the seven-day plan
+gauge and the per-model weekly gauges beside it are drawn. ACCOUNT_LABELS maps an email address to
+the name shown for it; those two constants are the only things here meant to be edited.
 
 Environment:
 
@@ -280,7 +282,11 @@ def model_windows(cache):
 
     Windows are returned least-used first. Every one of them shares a place in DROP_ORDER, so on a
     narrow terminal the list is trimmed from the front, and the window closest to running out is
-    the last to go.
+    the last to go. That ordering is also what lets the shared reset marker sit on the last window
+    of the run below: the window carrying it is the last one dropped.
+
+    A weekly window resets at the same instant as the plan's own seven-day window, to well under a
+    second, so the caller draws the pair as one gauge rather than repeating the reset.
     """
     # The schema does not stop a model appearing under more than one window. Only the tightest is
     # worth a slot on the line, and its reset time is what says which window that slot is showing.
@@ -383,21 +389,36 @@ def render_width():
 # ── layout ────────────────────────────────────────────────────────────────────
 
 LEFT, CENTRE, RIGHT = 0, 1, 2
-SEPARATORS = (" · ", " · ", " | ")
+
+# One separator per section. They read alike today, and the reader is better served by a line that
+# divides every item the same way than by a section boundary drawn in punctuation.
+SEPARATORS = (" | ", " | ", " | ")
+
+# Two gauges reporting one window are joined with this instead of their section's separator. The bar
+# divides independent items the whole line over, so a different mark is what says these two are not
+# independent, and that the reset marker written once at the end of the run covers all of them. It
+# is three columns wide, the same as the separator, so joining costs the layout nothing.
+SHARED_JOIN = " · "
+WEEKLY = "weekly"         # group tag for the gauges the plan's seven-day reset is shared across
+SAME_RESET = 60           # seconds apart within which two windows reset at the same instant
 
 # Drop order when the line will not fit: the first name goes first.
 DROP_ORDER = ("dirs", "think", "effort", "pr", "7d", "model_quota", "account", "5h", "ctx", "model")
 
 
 def build(data):
-    """Return [(priority, section, text)], priority being the item's place in DROP_ORDER."""
+    """Return [(priority, section, text, group)], priority being the item's place in DROP_ORDER.
+
+    The group is None for an item that stands on its own, and a tag shared with the neighbours it
+    reports one window alongside.
+    """
     g = data.get
     cfg = claude_config()
     out = []
 
-    def add(name, section, text):
+    def add(name, section, text, group=None):
         if text:
-            out.append((DROP_ORDER.index(name), section, text))
+            out.append((DROP_ORDER.index(name), section, text, group))
 
     # ── Left: gauges ──────────────────────────────────────────────────────────
     cw = g("context_window") or {}
@@ -417,14 +438,32 @@ def build(data):
              if thresh and size else "")
     add("ctx", LEFT, f"ctx {ctx}%{scale}")
 
+    # The per-model weekly windows reset at the same instant as the plan's seven-day window, so the
+    # gauges beside each other were reporting one reset twice. The matching windows are joined to
+    # the 7d gauge and the marker is written once, at the end of the run. Only a run starting at the
+    # first window can be joined: a window on some other cadence sits between the gauges as an
+    # ordinary item, and a marker past it would no longer read as the 7d gauge's reset.
+    cache, age = usage_cache(cfg)
+    windows = model_windows(cache)
     limits = g("rate_limits") or {}
+    weekly_reset = (limits.get("seven_day") or {}).get("resets_at") or 0
+    shared = 0
+    for _, _, reset in windows:
+        if not weekly_reset or not reset or abs(reset - weekly_reset) > SAME_RESET:
+            break
+        shared += 1
+
     for key, short in (("five_hour", "5h"), ("seven_day", "7d")):
         w = limits.get(key)
         if not w:
             continue
         pct = int(w.get("used_percentage") or 0)
-        left = until(w.get("resets_at"))
-        add(short, LEFT, f"{short} {pct}% {left}" if left else f"{short} {pct}%")
+        # The 7d gauge gives up its marker to the run it is joined to. Nothing is lost when the line
+        # narrows, because DROP_ORDER takes 7d before any model gauge: the run outlives it.
+        joined = short == "7d" and shared > 0
+        left = "" if joined else until(w.get("resets_at"))
+        add(short, LEFT, f"{short} {pct}% {left}" if left else f"{short} {pct}%",
+            WEEKLY if joined else None)
 
     # Lower-cased to read as a gauge alongside 5h and 7d rather than as a second model name; the
     # one on the right is what is answering, this is what it is spending.
@@ -433,12 +472,18 @@ def build(data):
     # below should already have replaced, so the honest report is that the number is unknown
     # rather than a number carrying a warning, which still invites being read. It is the width of
     # the percentage it stands in for, so the line does not shift as it comes and goes.
-    cache, age = usage_cache(cfg)
     stale = age > STALE_MARK
-    for name, pct, reset in model_windows(cache):
+    for i, (name, pct, reset) in enumerate(windows):
         gauge = f"{name.lower()} {'STL' if stale else str(int(pct)) + '%'}"
-        left = until(reset)
-        add("model_quota", LEFT, f"{gauge} {left}" if left else gauge)
+        # A window joined to the 7d gauge shows no marker until the end of the run, where the reset
+        # is taken from the payload rather than the cache -- the payload arrives fresh every render,
+        # so the marker stays right even when the percentage beside it has gone stale.
+        joined = i < shared
+        if joined:
+            left = until(weekly_reset) if i == shared - 1 else ""
+        else:
+            left = until(reset)
+        add("model_quota", LEFT, f"{gauge} {left}" if left else gauge, WEEKLY if joined else None)
     refresh_usage(age)
 
     # ── Centre: where ─────────────────────────────────────────────────────────
@@ -464,8 +509,24 @@ def build(data):
 
 
 def assemble(items):
-    return [sep.join(t for _, sec, t in items if sec == s)
-            for s, sep in enumerate(SEPARATORS)]
+    """Each section's text, its items joined by its separator.
+
+    Two neighbours tagged with the same group take SHARED_JOIN instead, which is why the tag is
+    consulted here rather than baked into the text: an item whose partner has been dropped is no
+    longer beside it, and falls back to the ordinary separator on its own.
+    """
+    sections = []
+    for s, sep in enumerate(SEPARATORS):
+        text, previous = "", None
+        for _, sec, item, group in items:
+            if sec != s:
+                continue
+            if text:
+                text += SHARED_JOIN if group and group == previous else sep
+            text += item
+            previous = group
+        sections.append(text)
+    return sections
 
 
 def justify(left, centre, right, width):
