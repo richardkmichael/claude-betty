@@ -76,6 +76,18 @@ chat replies, code comments, commit messages, PR descriptions, docs.
   of a clause.
   - Write "The versions are intentionally compared as strings", never "The versions are compared
     as strings on purpose".
+- Front the precondition and end on the result, so the sentence runs given → produced.  A trailing
+  "given ..." clause reads as an afterthought, and makes the reader hold the instruction in suspense
+  before learning what it works from.
+  - Write "Given the tag being released, print the tag the release notes should start from",
+    never "Print the tag a release's notes should start from, given the tag being cut".
+- Keep noun phrases parallel when a sentence maps one thing onto another of the same kind, so the
+  reader sees there are two of them.
+  - "the tag being released" and "the tag the release notes should start from" are both "the
+    tag ...", which shows one tag being mapped to another.  "a release's notes ... start from"
+    breaks the parallel and hides that two tags are in play.
+- Use the established compound noun rather than a possessive built on the spot.
+  - Write "the release notes", never "a release's notes".
 
 # Terminology
 
