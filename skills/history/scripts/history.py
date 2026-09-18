@@ -47,6 +47,13 @@ UUID_RE = re.compile(
 # A UUID prefix must be >= 4 hex chars so a short query word is never a selector.
 HEX_PREFIX_RE = re.compile(r"^[0-9a-f][0-9a-f-]{3,}$", re.IGNORECASE)
 
+# How Claude Code names a project directory: every non-alphanumeric character
+# becomes a dash, and a name longer than PROJECT_KEY_MAX is truncated and given
+# a suffix derived from the whole original path.
+PROJECT_KEY_MAX = 200
+NON_ALNUM_RE = re.compile(r"[^a-zA-Z0-9]")
+BASE36_DIGITS = "0123456789abcdefghijklmnopqrstuvwxyz"
+
 TITLE_MARKER = '"type":"custom-title"'
 _SCAN_BATCH = 800
 WIDEN_CAP = 30  # default match cap when a search auto-widens to all projects
@@ -506,6 +513,35 @@ def current_session_file(args):
     return None
 
 
+def _project_key(path):
+    """The directory name Claude Code stores `path`'s sessions under.
+
+    The suffix for an over-long name is a signed 32-bit accumulator over the
+    path's UTF-16 code units, absolute value, base 36.  Iterating UTF-16 rather
+    than code points matters only for a path holding a character outside the
+    basic plane, but getting it wrong would name a directory that does not
+    exist.  None of this is a published interface.
+    """
+    name = NON_ALNUM_RE.sub("-", path)
+    if len(name) <= PROJECT_KEY_MAX:
+        return name
+
+    units = path.encode("utf-16-le", "surrogatepass")
+    accumulator = 0
+    for index in range(0, len(units), 2):
+        accumulator = (accumulator << 5) - accumulator + (units[index] | (units[index + 1] << 8))
+        accumulator &= 0xFFFFFFFF
+        if accumulator >= 0x80000000:
+            accumulator -= 0x100000000
+
+    accumulator = abs(accumulator)
+    suffix = ""
+    while accumulator:
+        accumulator, remainder = divmod(accumulator, 36)
+        suffix = BASE36_DIGITS[remainder] + suffix
+    return f"{name[:PROJECT_KEY_MAX]}-{suffix or '0'}"
+
+
 def current_project_dir(args):
     cf = None
     if args.file:
@@ -519,10 +555,13 @@ def current_project_dir(args):
     if cf:
         return str(Path(cf).parent)
     # Fall back to $PWD encoded the way Claude Code names project dirs, walking
-    # up so an invocation from a subdirectory still finds the project.
+    # up so an invocation from a subdirectory still finds the project.  The
+    # encoding has to be exact: a near-miss finds nothing here and the walk
+    # then lands on a parent directory, reporting another project's sessions
+    # as this one's.
     cwd = Path(os.getcwd())
     for d in [cwd, *cwd.parents]:
-        cand = PROJECTS_ROOT / str(d).replace("/", "-").replace(".", "-")
+        cand = PROJECTS_ROOT / _project_key(str(d))
         if cand.is_dir():
             return str(cand)
     return None
