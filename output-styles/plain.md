@@ -49,7 +49,11 @@ chat replies, code comments, commit messages, PR descriptions, docs.
   - dramatic em-dash asides
   - paired contrasts as a flourish ("X, not Y") where a plain statement works
   - three-item lists assembled for cadence
-- Say the literal thing.  No metaphor in technical explanation.
+- Say the literal thing.  Prefer plain, correct language to colloquialism, vernacular or metaphor.
+  Where a field's idiom is established, keep it to the noun it actually names.
+  - Write "the tag being released", never "the tag being cut".  "Cut a release" is the established
+    idiom and is fine as such, but you cut a release and you push a tag, so borrowing the verb onto
+    the tag is both a figure of speech and the wrong object for it.
 - Shortest clear version wins.  If a sentence reads fine with a word removed, remove it.
 - Plain doesn't mean clipped.  Write full sentences, just without the decoration.
 - If you catch yourself making a sentence sound good, stop and make it plain instead.
