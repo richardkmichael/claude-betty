@@ -82,9 +82,32 @@ export type Line = {
   color?: string
   bold?: boolean
   dim?: boolean
-  /** The file a diff line belongs to; absent on the message and the file headers. */
+  /** Which part of the commit the line belongs to. */
+  kind: LineKind
+  /** The file, for a file header, a hunk header, a diff line and a file's note. */
   path?: string
+  /** The enclosing hunk's header, for a diff line. */
+  hunk?: string
+  /** The line's number in the file before the commit: a context or `-` line. */
+  oldLine?: number
+  /** The line's number in the file at the commit: a context or `+` line. */
+  newLine?: number
 }
+
+/**
+ * The parts of a commit's content as the pane lays them out: the subject
+ * line, the author line, the message's lines, a note the pane adds (loading,
+ * a rename, a cut), a file header, a hunk header, and the diff's own lines.
+ */
+export type LineKind =
+  | 'subject'
+  | 'author'
+  | 'blank'
+  | 'message'
+  | 'note'
+  | 'file'
+  | 'hunk'
+  | 'diff'
 
 /** The selected row's mark, in the gutter's first column. */
 export const POINTER = '❯'
@@ -189,28 +212,28 @@ export function contentLinesOf(model: PaneModel): Line[] {
   }
 
   const lines: Line[] = [
-    { text: `${commit.short} ${sanitize(commit.subject)}`, bold: true },
-    { text: `${sanitize(commit.author)} · ${commit.date}`, dim: true },
+    { text: `${commit.short} ${sanitize(commit.subject)}`, bold: true, kind: 'subject' },
+    { text: `${sanitize(commit.author)} · ${commit.date}`, dim: true, kind: 'author' },
   ]
 
   if (commit.body !== '') {
-    lines.push({ text: '' })
+    lines.push({ text: '', kind: 'blank' })
 
     for (const line of commit.body.split('\n')) {
-      lines.push({ text: sanitize(line) })
+      lines.push({ text: sanitize(line), kind: 'message' })
     }
   }
 
-  lines.push({ text: '' })
+  lines.push({ text: '', kind: 'blank' })
 
   const state = model.diffs[commit.sha]
 
   if (state === undefined || state.kind === 'loading') {
-    lines.push({ text: 'loading the diff…', dim: true })
+    lines.push({ text: 'loading the diff…', dim: true, kind: 'note' })
   } else if (state.kind === 'failed') {
-    lines.push({ text: `git show failed: ${sanitize(state.error)}`, color: 'red' })
+    lines.push({ text: `git show failed: ${sanitize(state.error)}`, color: 'red', kind: 'note' })
   } else if (state.files.length === 0) {
-    lines.push({ text: '(empty commit)', dim: true })
+    lines.push({ text: '(empty commit)', dim: true, kind: 'note' })
   } else {
     for (const file of state.files) {
       lines.push(...fileLinesOf(file))
@@ -220,25 +243,59 @@ export function contentLinesOf(model: PaneModel): Line[] {
   return lines
 }
 
+/** A hunk header's old and new start lines: `@@ -10,7 +10,8 @@ …`. */
+const HUNK_HEADER = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/
+
 function fileLinesOf(file: FileDiff): Line[] {
-  const lines: Line[] = [{ text: sanitize(file.path), bold: true }]
+  const lines: Line[] = [
+    { text: sanitize(file.path), bold: true, kind: 'file', path: file.path },
+  ]
 
   if (file.hunks === '') {
-    lines.push({ text: file.note ?? '(no text diff)', dim: true })
+    lines.push({ text: file.note ?? '(no text diff)', dim: true, kind: 'note', path: file.path })
   } else {
-    for (const line of file.hunks.replace(/\n$/, '').split('\n')) {
-      lines.push({ ...diffLineOf(line), path: file.path })
+    let hunk: string | undefined
+    let oldAt = 0
+    let newAt = 0
+
+    for (const text of file.hunks.replace(/\n$/, '').split('\n')) {
+      if (text.startsWith('@')) {
+        const header = HUNK_HEADER.exec(text)
+
+        hunk = text
+        oldAt = Number(header?.[1] ?? 0)
+        newAt = Number(header?.[2] ?? 0)
+        lines.push({ text, color: 'cyan', kind: 'hunk', path: file.path, hunk: text })
+      } else {
+        const lead = text[0]
+        const numbers =
+          lead === '+'
+            ? { newLine: newAt++ }
+            : lead === '-'
+              ? { oldLine: oldAt++ }
+              : lead === '\\'
+                ? {}
+                : { oldLine: oldAt++, newLine: newAt++ }
+
+        lines.push({
+          ...diffLineOf(text),
+          kind: 'diff',
+          path: file.path,
+          ...(hunk === undefined ? {} : { hunk }),
+          ...numbers,
+        })
+      }
     }
   }
 
   if (file.isCut) {
-    lines.push({ text: '(cut)', dim: true })
+    lines.push({ text: '(cut)', dim: true, kind: 'note', path: file.path })
   }
 
   return lines
 }
 
-function diffLineOf(text: string): Line {
+function diffLineOf(text: string): Pick<Line, 'text' | 'color'> {
   const lead = text[0]
 
   if (lead === '+') {
@@ -247,10 +304,6 @@ function diffLineOf(text: string): Line {
 
   if (lead === '-') {
     return { text, color: 'red' }
-  }
-
-  if (lead === '@') {
-    return { text, color: 'cyan' }
   }
 
   return { text }
@@ -303,7 +356,7 @@ export function paneView(
   const shown = lines.slice(top, top + wanted)
 
   while (shown.length < wanted) {
-    shown.push({ text: '' })
+    shown.push({ text: '', kind: 'blank' })
   }
 
   const content: RenderElement[] = Client

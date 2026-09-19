@@ -425,15 +425,13 @@ export function register(on: On) {
       return
     }
 
-    const path = chosen.find(line => line.path !== undefined)?.path
-
     armed.set(key, {
       key,
       kind: 'lines',
       sha: commit.sha,
       short: commit.short,
       token: linesTokenOf(commit.short, range),
-      text: linesTextOf(commit, chosen.map(line => line.text), path),
+      text: linesTextOf(commit, chosen),
       isWritten: false,
       range,
     })
@@ -1085,9 +1083,10 @@ function orientationOf(label: string, count: number): string {
     `${countOf(count)} (${label}). The user can select a commit and press ` +
     `${Names.ASK_HOTKEY} to attach its message and diff to their next prompt, ` +
     `shown in their prompt as "${tokenOf('<sha>')}", or drag over lines of it ` +
-    `to attach those lines alone, shown as "[⧉ <sha>:<from>-<to>]"; the ` +
-    `attachment itself begins "${Names.ATTACHED_LEAD}" for a whole commit, or ` +
-    `"${Names.ATTACHED_LEAD_LINES}" for lines. Escape closes the pane while it has the ` +
+    `to attach those lines alone, shown as "[⧉ <sha>:<from>-<to>]"; a whole ` +
+    `commit's attachment begins "${Names.ATTACHED_LEAD}" and wraps a <commit> element, ` +
+    `a lines attachment "${Names.ATTACHED_LEAD_LINES} lines of commit" and wraps ` +
+    `<commit-lines>. Escape closes the pane while it has the ` +
     `keys, as does /commits again; the ${Names.CLOSE_TOOL_FULL_NAME} tool ` +
     `closes it too.`
   )

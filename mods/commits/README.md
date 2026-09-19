@@ -63,11 +63,19 @@ selected commit, and the keys stay in the region through all of it, unlike
 `a` pressed on the pane's own ring, after which the composer takes them.
 Other typed letters go nowhere; Escape hands the keys back to the composer.
 
-When the prompt is sent, each armed commit rides along as hidden context, as
-`git log` prints it plus its hunks, beginning `The user attached commit
-<sha>`, and each armed range as the commit's subject and those lines,
-beginning `The user attached N lines from commit <sha>`; tokens are
-stripped from the text first. A written token deleted by
+When the prompt is sent, each armed commit rides along as hidden context
+beginning `The user attached commit <sha>`: a `<commit>` element with the
+sha, author and date as attributes, holding `<commit-subject>`,
+`<commit-message>` and one `<commit-diff path="…">` per file with its hunks
+as `git show` prints them (a `note` attribute instead for a rename or a
+binary). Each armed range rides along beginning `The user attached lines of
+commit <sha>`: a `<commit-lines>` element holding one element per run of
+lines, named for the part of the commit it is from. A `<commit-diff>` run
+carries `new-rev` and `new-lines`, the lines' numbers in the file at the
+commit worked out from the hunk header, and, when the run removes lines,
+`old-rev` and `old-lines` at the parent, so the model can read around them
+with `git show <rev>:<path>` instead of finding them in the diff again.
+Tokens are stripped from the text first. A written token deleted by
 hand is a detach, and the gutter clears on that edit. A prompt that
 held only tokens is sent as `See the attached commit.` `/clear` and
 `/resume` forget everything and take the tokens out.

@@ -566,9 +566,13 @@ describe('register', () => {
     const [first] = submitted
 
     expect(first?.text).toBe('Is the split right?')
-    expect(first?.context?.[0]).toContain(`${Names.ATTACHED_LEAD} ${SHA_A}`)
-    expect(first?.context?.[0]).toContain('    Add the pane')
-    expect(first?.context?.[0]).toContain('@@ -1 +1 @@')
+    expect(first?.context?.[0]).toContain(`${Names.ATTACHED_LEAD} aaaaaaa`)
+    expect(first?.context?.[0]).toContain(`<commit sha="${SHA_A}" author="Ada" date="2026-09-18">`)
+    expect(first?.context?.[0]).toContain('<commit-subject>Add the pane</commit-subject>')
+    expect(first?.context?.[0]).toContain('<commit-message>\nA body line\n</commit-message>')
+    expect(first?.context?.[0]).toContain('<commit-diff path="app.ts">\n@@ -1 +1 @@')
+    expect(first?.context?.[0]).toContain('<commit-diff path="new.py" note="renamed from old.py"/>')
+    expect(first?.context?.[0]).toContain('</commit-diff>\n</commit>')
 
     await $.prompt.submit({
       text: 'And this?',
@@ -811,10 +815,19 @@ describe('register', () => {
     const [only] = submitted
 
     expect(only?.text).toBe('Why this change?')
-    expect(only?.context?.[0]).toContain(`${Names.ATTACHED_LEAD_LINES} 2 lines from commit ${SHA_A}`)
-    expect(only?.context?.[0]).toContain('=== app.ts ===')
-    expect(only?.context?.[0]).toContain('-const a = 1\n+const a = 2')
-    expect(only?.context?.[0]).not.toContain('@@ -1 +1 @@')
+    expect(only?.context?.[0]).toContain(`${Names.ATTACHED_LEAD_LINES} lines of commit aaaaaaa`)
+    expect(only?.context?.[0]).toContain(
+      [
+        '<commit-lines sha="aaaaaaa" subject="Add the pane">',
+        '<commit-diff path="app.ts" new-rev="aaaaaaa" new-lines="1" old-rev="aaaaaaa^" old-lines="1">',
+        '-const a = 1',
+        '+const a = 2',
+        '</commit-diff>',
+        '</commit-lines>',
+      ].join('\n'),
+    )
+    expect(only?.context?.[0], 'the legend explains the line attributes').toContain('new-lines are')
+    expect(only?.context?.[0]).not.toContain('@@')
 
     await ui.unmount()
   })
@@ -1022,6 +1035,61 @@ describe('register', () => {
     expect(textOf(await $.ui.render(PANE)), 'Tab wraps to the first row').toContain(
       '❯ ⧉ aaaaaaa Add the pane',
     )
+
+    await ui.unmount()
+  })
+
+  test('lines from the message are headed as such, and the subject line by itself', async ($, on) => {
+    const world = worldOf(on)
+    const submitted: (readonly string[] | undefined)[] = []
+
+    on('prompt.submit', ($, e) => {
+      submitted.push(e.context)
+
+      return { text: e.text, context: e.context }
+    })
+
+    await $.session.start(SESSION)
+    await $.command.run(COMMITS)
+    await world.clock.settle()
+
+    const ui = await $.ui.mount({
+      plugin: Names.PLUGIN_NAME,
+      surface: 'terminal',
+      component: 'Pane',
+      requestId: Names.PANE_ID,
+      props: PANE.props,
+      viewport: PANE.viewport,
+    })
+
+    await ui.resize({ columns: 78, rows: 26, in: 'diff' })
+
+    // content line 0 is the subject, 3 is the body line
+    await ui.pointer({ type: 'down', x: 4, y: 0, button: 'left', in: 'diff' })
+    await ui.pointer({ type: 'move', x: 4, y: 3, button: 'left', in: 'diff' })
+    await ui.pointer({ type: 'up', x: 4, y: 3, button: 'left', in: 'diff' })
+    await world.clock.settle()
+
+    await $.prompt.submit({
+      text: `${world.box.text}Reword?`,
+      wait: false,
+      origin: { kind: 'composer' },
+    })
+
+    const block = submitted[0]?.[0] ?? ''
+
+    expect(block).toContain(
+      [
+        '<commit-lines sha="aaaaaaa" subject="Add the pane">',
+        '<commit-subject>Add the pane</commit-subject>',
+        '<commit-author>Ada, 2026-09-18</commit-author>',
+        '<commit-message>',
+        'A body line',
+        '</commit-message>',
+        '</commit-lines>',
+      ].join('\n'),
+    )
+    expect(block, 'no diff lines, so no legend').not.toContain('new-lines are')
 
     await ui.unmount()
   })
