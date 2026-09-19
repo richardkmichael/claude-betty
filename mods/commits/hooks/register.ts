@@ -122,7 +122,7 @@ const TOOL_INPUT_SCHEMA = {
  * @returns the token
  */
 export function tokenOf(short: string): string {
-  return `[⧉ commit ${short}]`
+  return tokenTextOf(`commit ${short}`)
 }
 
 /**
@@ -134,7 +134,12 @@ export function tokenOf(short: string): string {
  * @returns the token
  */
 export function linesTokenOf(short: string, range: LineRange): string {
-  return `[⧉ ${short}:${range.from}-${range.to}]`
+  return tokenTextOf(`${short}:${range.from}-${range.to}`)
+}
+
+/** The shape every token of this plugin's takes: the mark, then what it names. */
+function tokenTextOf(inner: string): string {
+  return `[⧉ ${inner}]`
 }
 
 /** Any token of this plugin's in the prompt's text, with the space after it. */
@@ -381,14 +386,14 @@ export function register(on: On) {
       return
     }
 
-    const lines = contentLinesOf(model)
-    const chosen = lines.slice(Math.max(0, from), Math.max(0, to) + 1)
+    const start = Math.max(0, from)
+    const chosen = contentLinesOf(model).slice(start, Math.max(0, to) + 1)
 
     if (chosen.length === 0) {
       return
     }
 
-    const range: LineRange = { from: Math.max(0, from), to: Math.max(0, from) + chosen.length - 1 }
+    const range: LineRange = { from: start, to: start + chosen.length - 1 }
     const key = `${commit.sha}:${range.from}-${range.to}`
 
     if (armed.has(key)) {
@@ -542,17 +547,22 @@ export function register(on: On) {
     }
 
     try {
-      await engine.registerCommand({
-        name: Names.COMMAND_NAME,
-        description: Names.COMMAND_DESCRIPTION,
-        argumentHint: Names.ARGUMENT_HINT,
-      })
-
-      const { tool } = await engine.registerTool({
-        name: Names.TOOL_NAME,
-        description: Names.TOOL_DESCRIPTION,
-        inputSchema: TOOL_INPUT_SCHEMA,
-      })
+      const [, { tool }] = await Promise.all([
+        engine.registerCommand({
+          name: Names.COMMAND_NAME,
+          description: Names.COMMAND_DESCRIPTION,
+          argumentHint: Names.ARGUMENT_HINT,
+        }),
+        engine.registerTool({
+          name: Names.TOOL_NAME,
+          description: Names.TOOL_DESCRIPTION,
+          inputSchema: TOOL_INPUT_SCHEMA,
+        }),
+        engine.registerTool({
+          name: Names.CLOSE_TOOL_NAME,
+          description: Names.CLOSE_TOOL_DESCRIPTION,
+        }),
+      ])
 
       if (tool !== Names.TOOL_FULL_NAME) {
         engine.uiLog(
@@ -560,11 +570,6 @@ export function register(on: On) {
             `${Names.TOOL_FULL_NAME}; the model's calls will not be answered`,
         )
       }
-
-      await engine.registerTool({
-        name: Names.CLOSE_TOOL_NAME,
-        description: Names.CLOSE_TOOL_DESCRIPTION,
-      })
 
       host = engine
     } catch (error) {
@@ -738,15 +743,17 @@ export function register(on: On) {
 
     const { visible, maxTop } = windowOf(model)
     const size = Math.abs(e.by)
-    const isEnd = size >= e.contentRows && e.contentRows > e.bodyRows
-    const isPage = !isEnd && size >= e.bodyRows
     const isWheel = e.pointer !== undefined
+    const isEnd = !isWheel && size >= e.contentRows && e.contentRows > e.bodyRows
+    const isPage = !isWheel && !isEnd && size >= e.bodyRows
 
-    const step = isEnd
-      ? maxTop
-      : isPage
-        ? visible
-        : size * (isWheel ? WHEEL_ROWS : 1)
+    const step = isWheel
+      ? size * WHEEL_ROWS
+      : isEnd
+        ? maxTop
+        : isPage
+          ? visible
+          : size
 
     if (setTop(model.top + Math.sign(e.by) * step)) {
       host.invalidate()
@@ -1046,7 +1053,7 @@ function orientationOf(label: string, count: number): string {
     `${Names.countOf(count)} (${label}). The user can select a commit and press ` +
     `${Names.ASK_HOTKEY} to attach its message and diff to their next prompt, ` +
     `shown in their prompt as "${tokenOf('<sha>')}", or drag over lines of it ` +
-    `to attach those lines alone, shown as "[⧉ <sha>:<from>-<to>]"; a whole ` +
+    `to attach those lines alone, shown as "${tokenTextOf('<sha>:<from>-<to>')}"; a whole ` +
     `commit's attachment begins "${Names.ATTACHED_LEAD}" and wraps a <commit> element, ` +
     `a lines attachment "${Names.ATTACHED_LEAD_LINES} lines of commit" and wraps ` +
     `<commit-lines>. Escape closes the pane while it has the ` +
