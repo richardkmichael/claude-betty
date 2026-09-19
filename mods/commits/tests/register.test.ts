@@ -7,6 +7,7 @@ import type {
   UiScrollInput,
 } from 'claude-code'
 import { describe, expect, mock, test, tier } from 'claude-code/testing'
+import type { Engine, Mounted } from 'claude-code/testing'
 
 import * as Names from '../hooks/names'
 import { linesTokenOf, tokenOf } from '../hooks/register'
@@ -112,9 +113,16 @@ function worldOf(
   const focused: (string | undefined)[] = []
   const scrolled: number[] = []
   const box = { text: '', cursor: 0, isRefusing: false }
+  const submitted: { text: string; context: readonly string[] | undefined }[] = []
   const clock = mock.clock(on)
 
   on('session.start', ($, e) => ({ cwd: e.cwd }))
+
+  on('prompt.submit', ($, e) => {
+    submitted.push({ text: e.text, context: e.context })
+
+    return { text: e.text, context: e.context }
+  })
   on('command.register', ($, e) => ({ value: { command: e.name } }))
   on('tool.register', ($, e) => ({
     value: { tool: `mcp__${Names.PLUGIN_NAME}__${e.name}` },
@@ -185,7 +193,50 @@ function worldOf(
     return {}
   })
 
-  return { runs, opens, opened, closed, focused, scrolled, box, clock }
+  return { runs, opens, opened, closed, focused, scrolled, box, submitted, clock }
+}
+
+type World = ReturnType<typeof worldOf>
+
+/**
+ * The world with the pane opened by `/commits` on the branch and its first
+ * diff loaded.
+ */
+async function openedWorldOf($: Engine, on: On): Promise<World> {
+  const world = worldOf(on)
+
+  await $.session.start(SESSION)
+  await $.command.run(COMMITS)
+  await world.clock.settle()
+
+  return world
+}
+
+/** The pane drawn on the terminal, its diff region sized to `rows`. */
+async function mountedPaneOf(
+  $: Engine,
+  pane: RenderInput<'Pane'> = PANE,
+  rows = 26,
+): Promise<Mounted<'terminal', 'Pane'>> {
+  const ui = await $.ui.mount({
+    plugin: Names.PLUGIN_NAME,
+    surface: 'terminal',
+    component: 'Pane',
+    requestId: Names.PANE_ID,
+    props: pane.props,
+    viewport: pane.viewport,
+  })
+
+  await ui.resize({ columns: 78, rows, in: 'diff' })
+
+  return ui
+}
+
+/** A left-button drag down the diff region's gutter from one row to another. */
+async function dragOver(ui: Mounted<'terminal', 'Pane'>, from: number, to: number): Promise<void> {
+  await ui.pointer({ type: 'down', x: 4, y: from, button: 'left', in: 'diff' })
+  await ui.pointer({ type: 'move', x: 4, y: to, button: 'left', in: 'diff' })
+  await ui.pointer({ type: 'up', x: 4, y: to, button: 'left', in: 'diff' })
 }
 
 /**
@@ -206,7 +257,7 @@ function textOf(node: unknown): string {
   }
 
   const props: unknown = Reflect.get(node, 'props')
-  const own = ['label', 'source']
+  const own = ['label']
     .map(name =>
       typeof props === 'object' && props ? Reflect.get(props, name) : undefined,
     )
@@ -308,11 +359,7 @@ describe('register', () => {
   })
 
   test('the ring landing on a row selects that commit', async ($, on) => {
-    const world = worldOf(on)
-
-    await $.session.start(SESSION)
-    await $.command.run(COMMITS)
-    await world.clock.settle()
+    const world = await openedWorldOf($, on)
 
     expect(textOf(await $.ui.render(PANE))).toContain('❯   aaaaaaa Add the pane')
 
@@ -343,11 +390,7 @@ describe('register', () => {
   })
 
   test('the ring wraps from the first row to the last and back, past the header', async ($, on) => {
-    const world = worldOf(on)
-
-    await $.session.start(SESSION)
-    await $.command.run(COMMITS)
-    await world.clock.settle()
+    const world = await openedWorldOf($, on)
     await $.ui.render(FOCUSED_PANE)
 
     const ringOnto = (element: string | undefined) =>
@@ -368,11 +411,7 @@ describe('register', () => {
   })
 
   test("the list chords move the selection from the prompt", async ($, on) => {
-    const world = worldOf(on)
-
-    await $.session.start(SESSION)
-    await $.command.run(COMMITS)
-    await world.clock.settle()
+    const world = await openedWorldOf($, on)
 
     const drawn = JSON.stringify(await $.ui.render(PANE))
 
@@ -398,11 +437,7 @@ describe('register', () => {
   })
 
   test('the selected row seeds the ring and the ask button has its hotkey', async ($, on) => {
-    const world = worldOf(on)
-
-    await $.session.start(SESSION)
-    await $.command.run(COMMITS)
-    await world.clock.settle()
+    await openedWorldOf($, on)
 
     const drawn = JSON.stringify(await $.ui.render(PANE))
 
@@ -412,11 +447,7 @@ describe('register', () => {
   })
 
   test('the arrows scroll the content under the pinned list', async ($, on) => {
-    const world = worldOf(on)
-
-    await $.session.start(SESSION)
-    await $.command.run(COMMITS)
-    await world.clock.settle()
+    const world = await openedWorldOf($, on)
 
     const before = JSON.stringify(await $.ui.render(SHORT_PANE))
 
@@ -511,11 +542,7 @@ describe('register', () => {
   })
 
   test('ask marks the commit and writes its token at once', async ($, on) => {
-    const world = worldOf(on)
-
-    await $.session.start(SESSION)
-    await $.command.run(COMMITS)
-    await world.clock.settle()
+    const world = await openedWorldOf($, on)
     await $.ui.render(FOCUSED_PANE)
 
     await $.ui.press({ plugin: Names.PLUGIN_NAME, key: 'ask' })
@@ -539,18 +566,7 @@ describe('register', () => {
   })
 
   test('the prompt rides an armed commit, once', async ($, on) => {
-    const world = worldOf(on)
-    const submitted: { text: string; context: readonly string[] | undefined }[] = []
-
-    on('prompt.submit', ($, e) => {
-      submitted.push({ text: e.text, context: e.context })
-
-      return { text: e.text, context: e.context }
-    })
-
-    await $.session.start(SESSION)
-    await $.command.run(COMMITS)
-    await world.clock.settle()
+    const world = await openedWorldOf($, on)
     await $.ui.render(FOCUSED_PANE)
     await $.ui.press({ plugin: Names.PLUGIN_NAME, key: 'ask' })
     await world.clock.settle()
@@ -563,7 +579,7 @@ describe('register', () => {
       origin: { kind: 'composer' },
     })
 
-    const [first] = submitted
+    const [first] = world.submitted
 
     expect(first?.text).toBe('Is the split right?')
     expect(first?.context?.[0]).toContain(`${Names.ATTACHED_LEAD} aaaaaaa`)
@@ -580,16 +596,12 @@ describe('register', () => {
       origin: { kind: 'composer' },
     })
 
-    expect(submitted[1]?.context, 'the second prompt carries nothing').toBeUndefined()
+    expect(world.submitted[1]?.context, 'the second prompt carries nothing').toBeUndefined()
     expect(textOf(await $.ui.render(PANE))).toContain('❯   aaaaaaa Add the pane')
   })
 
   test('ask again takes a written token back out', async ($, on) => {
-    const world = worldOf(on)
-
-    await $.session.start(SESSION)
-    await $.command.run(COMMITS)
-    await world.clock.settle()
+    const world = await openedWorldOf($, on)
     await $.ui.render(FOCUSED_PANE)
 
     world.box.text = 'Look: '
@@ -609,18 +621,7 @@ describe('register', () => {
   })
 
   test('a token deleted by hand disarms and attaches nothing', async ($, on) => {
-    const world = worldOf(on)
-    const submitted: (readonly string[] | undefined)[] = []
-
-    on('prompt.submit', ($, e) => {
-      submitted.push(e.context)
-
-      return { text: e.text, context: e.context }
-    })
-
-    await $.session.start(SESSION)
-    await $.command.run(COMMITS)
-    await world.clock.settle()
+    const world = await openedWorldOf($, on)
     await $.ui.render(FOCUSED_PANE)
     await $.ui.press({ plugin: Names.PLUGIN_NAME, key: 'ask' })
     await world.clock.settle()
@@ -643,22 +644,11 @@ describe('register', () => {
       origin: { kind: 'composer' },
     })
 
-    expect(submitted[0], 'no token, no attachment').toBeUndefined()
+    expect(world.submitted[0]?.context, 'no token, no attachment').toBeUndefined()
   })
 
   test('two armed commits ride together, and only the tokens are stripped', async ($, on) => {
-    const world = worldOf(on)
-    const submitted: { text: string; context: readonly string[] | undefined }[] = []
-
-    on('prompt.submit', ($, e) => {
-      submitted.push({ text: e.text, context: e.context })
-
-      return { text: e.text, context: e.context }
-    })
-
-    await $.session.start(SESSION)
-    await $.command.run(COMMITS)
-    await world.clock.settle()
+    const world = await openedWorldOf($, on)
     await $.ui.render(FOCUSED_PANE)
 
     await $.ui.press({ plugin: Names.PLUGIN_NAME, key: 'ask' })
@@ -678,7 +668,7 @@ describe('register', () => {
       origin: { kind: 'composer' },
     })
 
-    const [only] = submitted
+    const [only] = world.submitted
 
     expect(only?.text, 'tokens alone become a line the model can act on').not.toBe('')
     expect(only?.context).toHaveLength(2)
@@ -687,11 +677,7 @@ describe('register', () => {
   })
 
   test('closing the pane keeps the token and the commit armed', async ($, on) => {
-    const world = worldOf(on)
-
-    await $.session.start(SESSION)
-    await $.command.run(COMMITS)
-    await world.clock.settle()
+    const world = await openedWorldOf($, on)
     await $.ui.render(FOCUSED_PANE)
     await $.ui.press({ plugin: Names.PLUGIN_NAME, key: 'ask' })
     await world.clock.settle()
@@ -709,18 +695,7 @@ describe('register', () => {
   })
 
   test('an armed commit whose fill was refused rides anyway', async ($, on) => {
-    const world = worldOf(on)
-    const submitted: (readonly string[] | undefined)[] = []
-
-    on('prompt.submit', ($, e) => {
-      submitted.push(e.context)
-
-      return { text: e.text, context: e.context }
-    })
-
-    await $.session.start(SESSION)
-    await $.command.run(COMMITS)
-    await world.clock.settle()
+    const world = await openedWorldOf($, on)
     await $.ui.render(FOCUSED_PANE)
 
     world.box.isRefusing = true
@@ -739,7 +714,7 @@ describe('register', () => {
       origin: { kind: 'composer' },
     })
 
-    expect(submitted[0]?.[0]).toContain(SHA_A)
+    expect(world.submitted[0]?.context?.[0]).toContain(SHA_A)
   })
 
   test('/clear forgets the armed commits and takes their tokens out', async ($, on) => {
@@ -763,36 +738,14 @@ describe('register', () => {
   })
 
   test('a drag over diff lines arms them and writes their token', async ($, on) => {
-    const world = worldOf(on)
-    const submitted: { text: string; context: readonly string[] | undefined }[] = []
+    const world = await openedWorldOf($, on)
 
-    on('prompt.submit', ($, e) => {
-      submitted.push({ text: e.text, context: e.context })
-
-      return { text: e.text, context: e.context }
-    })
-
-    await $.session.start(SESSION)
-    await $.command.run(COMMITS)
-    await world.clock.settle()
-
-    const ui = await $.ui.mount({
-      plugin: Names.PLUGIN_NAME,
-      surface: 'terminal',
-      component: 'Pane',
-      requestId: Names.PANE_ID,
-      props: PANE.props,
-      viewport: PANE.viewport,
-    })
-
-    await ui.resize({ columns: 78, rows: 26, in: 'diff' })
+    const ui = await mountedPaneOf($)
 
     expect(await ui.find({ in: 'diff', text: /-const a = 1/ })).toBeDefined()
 
     // content lines 9 and 10 are the two changed lines of app.ts
-    await ui.pointer({ type: 'down', x: 4, y: 9, button: 'left', in: 'diff' })
-    await ui.pointer({ type: 'move', x: 4, y: 10, button: 'left', in: 'diff' })
-    await ui.pointer({ type: 'up', x: 4, y: 10, button: 'left', in: 'diff' })
+    await dragOver(ui, 9, 10)
     await world.clock.settle()
 
     const token = linesTokenOf('aaaaaaa', { from: 9, to: 10 })
@@ -813,7 +766,7 @@ describe('register', () => {
       origin: { kind: 'composer' },
     })
 
-    const [only] = submitted
+    const [only] = world.submitted
 
     expect(only?.text).toBe('Why this change?')
     expect(only?.context?.[0]).toContain(`${Names.ATTACHED_LEAD_LINES} lines of commit aaaaaaa`)
@@ -834,26 +787,11 @@ describe('register', () => {
   })
 
   test('arming the whole commit drops its armed lines and turns the mark green', async ($, on) => {
-    const world = worldOf(on)
+    const world = await openedWorldOf($, on)
 
-    await $.session.start(SESSION)
-    await $.command.run(COMMITS)
-    await world.clock.settle()
+    const ui = await mountedPaneOf($)
 
-    const ui = await $.ui.mount({
-      plugin: Names.PLUGIN_NAME,
-      surface: 'terminal',
-      component: 'Pane',
-      requestId: Names.PANE_ID,
-      props: PANE.props,
-      viewport: PANE.viewport,
-    })
-
-    await ui.resize({ columns: 78, rows: 26, in: 'diff' })
-
-    await ui.pointer({ type: 'down', x: 4, y: 9, button: 'left', in: 'diff' })
-    await ui.pointer({ type: 'move', x: 4, y: 10, button: 'left', in: 'diff' })
-    await ui.pointer({ type: 'up', x: 4, y: 10, button: 'left', in: 'diff' })
+    await dragOver(ui, 9, 10)
     await world.clock.settle()
 
     expect(world.box.text).toBe(`${linesTokenOf('aaaaaaa', { from: 9, to: 10 })} `)
@@ -880,22 +818,9 @@ describe('register', () => {
   })
 
   test('a click focuses, a drag arms, a click on the armed range disarms', async ($, on) => {
-    const world = worldOf(on)
+    const world = await openedWorldOf($, on)
 
-    await $.session.start(SESSION)
-    await $.command.run(COMMITS)
-    await world.clock.settle()
-
-    const ui = await $.ui.mount({
-      plugin: Names.PLUGIN_NAME,
-      surface: 'terminal',
-      component: 'Pane',
-      requestId: Names.PANE_ID,
-      props: PANE.props,
-      viewport: PANE.viewport,
-    })
-
-    await ui.resize({ columns: 78, rows: 26, in: 'diff' })
+    const ui = await mountedPaneOf($)
 
     await ui.pointer({ type: 'down', x: 4, y: 9, button: 'left', in: 'diff' })
     await ui.pointer({ type: 'up', x: 4, y: 9, button: 'left', in: 'diff' })
@@ -923,22 +848,9 @@ describe('register', () => {
   })
 
   test('keys inside the region scroll the window', async ($, on) => {
-    const world = worldOf(on)
+    const world = await openedWorldOf($, on)
 
-    await $.session.start(SESSION)
-    await $.command.run(COMMITS)
-    await world.clock.settle()
-
-    const ui = await $.ui.mount({
-      plugin: Names.PLUGIN_NAME,
-      surface: 'terminal',
-      component: 'Pane',
-      requestId: Names.PANE_ID,
-      props: SHORT_PANE.props,
-      viewport: SHORT_PANE.viewport,
-    })
-
-    await ui.resize({ columns: 78, rows: 4, in: 'diff' })
+    const ui = await mountedPaneOf($, SHORT_PANE, 4)
 
     expect(await ui.find({ in: 'diff', text: /Add the pane/ })).toBeDefined()
 
@@ -957,11 +869,7 @@ describe('register', () => {
   })
 
   test('an arming and an unfocused redraw at once write the token once', async ($, on) => {
-    const world = worldOf(on)
-
-    await $.session.start(SESSION)
-    await $.command.run(COMMITS)
-    await world.clock.settle()
+    const world = await openedWorldOf($, on)
     await $.ui.render(FOCUSED_PANE)
 
     await Promise.all([
@@ -976,22 +884,9 @@ describe('register', () => {
   })
 
   test('inside the region, a arms the selected commit and Tab moves between commits', async ($, on) => {
-    const world = worldOf(on)
+    const world = await openedWorldOf($, on)
 
-    await $.session.start(SESSION)
-    await $.command.run(COMMITS)
-    await world.clock.settle()
-
-    const ui = await $.ui.mount({
-      plugin: Names.PLUGIN_NAME,
-      surface: 'terminal',
-      component: 'Pane',
-      requestId: Names.PANE_ID,
-      props: PANE.props,
-      viewport: PANE.viewport,
-    })
-
-    await ui.resize({ columns: 78, rows: 26, in: 'diff' })
+    const ui = await mountedPaneOf($)
 
     await ui.key({ key: 'a', in: 'diff' })
     await world.clock.settle()
@@ -1041,34 +936,12 @@ describe('register', () => {
   })
 
   test('lines from the message are headed as such, and the subject line by itself', async ($, on) => {
-    const world = worldOf(on)
-    const submitted: (readonly string[] | undefined)[] = []
+    const world = await openedWorldOf($, on)
 
-    on('prompt.submit', ($, e) => {
-      submitted.push(e.context)
-
-      return { text: e.text, context: e.context }
-    })
-
-    await $.session.start(SESSION)
-    await $.command.run(COMMITS)
-    await world.clock.settle()
-
-    const ui = await $.ui.mount({
-      plugin: Names.PLUGIN_NAME,
-      surface: 'terminal',
-      component: 'Pane',
-      requestId: Names.PANE_ID,
-      props: PANE.props,
-      viewport: PANE.viewport,
-    })
-
-    await ui.resize({ columns: 78, rows: 26, in: 'diff' })
+    const ui = await mountedPaneOf($)
 
     // content line 0 is the subject, 3 is the body line
-    await ui.pointer({ type: 'down', x: 4, y: 0, button: 'left', in: 'diff' })
-    await ui.pointer({ type: 'move', x: 4, y: 3, button: 'left', in: 'diff' })
-    await ui.pointer({ type: 'up', x: 4, y: 3, button: 'left', in: 'diff' })
+    await dragOver(ui, 0, 3)
     await world.clock.settle()
 
     await $.prompt.submit({
@@ -1077,7 +950,7 @@ describe('register', () => {
       origin: { kind: 'composer' },
     })
 
-    const block = submitted[0]?.[0] ?? ''
+    const block = world.submitted[0]?.context?.[0] ?? ''
 
     expect(block).toContain(
       [
