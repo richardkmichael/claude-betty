@@ -819,6 +819,52 @@ describe('register', () => {
     await ui.unmount()
   })
 
+  test('arming the whole commit drops its armed lines and turns the mark green', async ($, on) => {
+    const world = worldOf(on)
+
+    await $.session.start(SESSION)
+    await $.command.run(COMMITS)
+    await world.clock.settle()
+
+    const ui = await $.ui.mount({
+      plugin: Names.PLUGIN_NAME,
+      surface: 'terminal',
+      component: 'Pane',
+      requestId: Names.PANE_ID,
+      props: PANE.props,
+      viewport: PANE.viewport,
+    })
+
+    await ui.resize({ columns: 78, rows: 26, in: 'diff' })
+
+    await ui.pointer({ type: 'down', x: 4, y: 9, button: 'left', in: 'diff' })
+    await ui.pointer({ type: 'move', x: 4, y: 10, button: 'left', in: 'diff' })
+    await ui.pointer({ type: 'up', x: 4, y: 10, button: 'left', in: 'diff' })
+    await world.clock.settle()
+
+    expect(world.box.text).toBe(`${linesTokenOf('aaaaaaa', { from: 9, to: 10 })} `)
+
+    await $.ui.press({ plugin: Names.PLUGIN_NAME, key: 'ask' })
+    await world.clock.settle()
+
+    const whole = JSON.stringify(await $.ui.render(PANE))
+
+    expect(whole, 'green once the whole commit is armed').toContain(
+      '{"color":"green"},"children":["⧉"]',
+    )
+    expect(whole).not.toContain('{"color":"yellow"},"children":["⧉"]')
+    expect(world.box.text, "the ranges' tokens are gone").toBe(`${tokenOf('aaaaaaa')} `)
+
+    await ui.redraw()
+
+    expect(
+      await ui.find({ in: 'diff', text: /⧉/ }),
+      'the gutter marks on the lines are gone',
+    ).toBeUndefined()
+
+    await ui.unmount()
+  })
+
   test('a click focuses, a drag arms, a click on the armed range disarms', async ($, on) => {
     const world = worldOf(on)
 

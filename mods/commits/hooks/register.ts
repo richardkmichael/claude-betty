@@ -376,6 +376,18 @@ export function register(on: On) {
     const state = model.diffs[sha]
     const files = state?.kind === 'loaded' ? state.files : []
 
+    const ranges = [...armed.values()].filter(
+      candidate => candidate.kind === 'lines' && candidate.sha === sha,
+    )
+
+    if (ranges.length > 0) {
+      await removeTokens(engine, ranges.filter(entry => entry.isWritten)).catch(() => undefined)
+
+      for (const entry of ranges) {
+        armed.delete(entry.key)
+      }
+    }
+
     armed.set(sha, {
       key: sha,
       kind: 'commit',
