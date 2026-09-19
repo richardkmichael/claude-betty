@@ -631,8 +631,9 @@ describe('register', () => {
     world.box.text = 'never mind'
     world.box.cursor = world.box.text.length
 
-    // The kit cannot raise prompt.edit; the redraw backstop reads the box.
-    expect(textOf(await $.ui.render(FOCUSED_PANE)), 'the gutter follows the box').toContain(
+    // The kit cannot raise prompt.edit; a redraw while the composer holds the
+    // keys reads the box instead.
+    expect(textOf(await $.ui.render(PANE)), 'the gutter follows the box').toContain(
       '❯   aaaaaaa Add the pane',
     )
 

@@ -183,14 +183,12 @@ export function register(on: On) {
   }
 
   async function forget(engine: Host | null) {
-    const written = [...armed.values()].filter(entry => entry.isWritten)
-
-    if (engine && written.length > 0) {
-      await removeTokens(engine, written).catch(() => undefined)
-    }
-
     armed.clear()
     reset()
+
+    if (engine) {
+      await syncBox(engine).catch(() => undefined)
+    }
   }
 
   async function showCommits(
@@ -354,16 +352,8 @@ export function register(on: On) {
     const state = model.diffs[sha]
     const files = state?.kind === 'loaded' ? state.files : []
 
-    const ranges = [...armed.values()].filter(
-      candidate => candidate.kind === 'lines' && candidate.sha === sha,
-    )
-
-    if (ranges.length > 0) {
-      await removeTokens(engine, ranges.filter(entry => entry.isWritten)).catch(() => undefined)
-
-      for (const entry of ranges) {
-        armed.delete(entry.key)
-      }
+    for (const entry of linesArmedOf(sha)) {
+      armed.delete(entry.key)
     }
 
     armed.set(sha, {
@@ -377,7 +367,7 @@ export function register(on: On) {
     })
     syncArmed()
     engine.invalidate()
-    await writeTokens(engine).catch(() => undefined)
+    await syncBox(engine).catch(() => undefined)
   }
 
   /**
@@ -417,7 +407,7 @@ export function register(on: On) {
     })
     syncArmed()
     engine.invalidate()
-    await writeTokens(engine).catch(() => undefined)
+    await syncBox(engine).catch(() => undefined)
   }
 
   /** Disarms the armed range of the selected commit that holds a content line. */
@@ -432,13 +422,10 @@ export function register(on: On) {
   }
 
   async function disarm(engine: Host, entry: Armed) {
-    if (entry.isWritten) {
-      await removeTokens(engine, [entry]).catch(() => undefined)
-    }
-
     armed.delete(entry.key)
     syncArmed()
     engine.invalidate()
+    await syncBox(engine).catch(() => undefined)
   }
 
   /** Moves the content window by `delta` rows, clamped to the content. */
@@ -453,37 +440,48 @@ export function register(on: On) {
     }
   }
 
-  let writing: Promise<void> = Promise.resolve()
+  let syncing: Promise<void> = Promise.resolve()
 
   /**
-   * Writes the tokens of the armed commits not yet in the prompt box, in one
-   * append: on arming, and again at a redraw or a close for one a refused
-   * fill left behind. Writes run one after another, so a redraw during an
-   * arming's own write cannot append the same token twice.
+   * Brings the prompt box in step with `armed`, in one read and at most one
+   * write: an entry whose written token the person deleted is dropped, the
+   * tokens of entries no longer armed leave the box, and the tokens not yet
+   * in it are appended. On arming and disarming, at a redraw or a close for
+   * a token a refused fill left behind, and at a fresh load for tokens of a
+   * module state that is gone. Syncs run one after another, so a redraw
+   * during an arming's own sync cannot append the same token twice.
    */
-  function writeTokens(engine: Host): Promise<void> {
-    const run = writing.then(() => writePending(engine))
+  function syncBox(engine: Host): Promise<void> {
+    const run = syncing.then(() => syncBoxNow(engine))
 
-    writing = run.catch(() => undefined)
+    syncing = run.catch(() => undefined)
 
     return run
   }
 
-  async function writePending(engine: Host) {
+  async function syncBoxNow(engine: Host) {
+    const box = await engine.promptRead()
+
+    reconcileArmed(engine, box.text)
+
+    const tokens = new Set([...armed.values()].map(entry => entry.token))
+    const kept = box.text.replace(TOKEN_PATTERN, match =>
+      tokens.has(match.trimEnd()) ? match : '',
+    )
     const pending = [...armed.values()].filter(entry => !entry.isWritten)
 
-    if (pending.length === 0) {
+    if (kept === box.text && pending.length === 0) {
       return
     }
 
-    const box = await engine.promptRead()
-    const lead = box.text === '' || /\s$/.test(box.text) ? '' : ' '
-    const tokens = pending.map(entry => `${entry.token} `).join('')
+    const appended = pending.map(entry => `${entry.token} `).join('')
+    const lead = appended === '' || kept === '' || /\s$/.test(kept) ? '' : ' '
 
-    const { isFilled } = await engine.promptFill({
-      text: `${lead}${tokens}`,
-      mode: 'append',
-    })
+    const { isFilled } = await engine.promptFill(
+      kept === box.text
+        ? { text: `${lead}${appended}`, mode: 'append' }
+        : { text: `${kept}${lead}${appended}`, mode: 'replace' },
+    )
 
     if (isFilled) {
       for (const entry of pending) {
@@ -492,22 +490,10 @@ export function register(on: On) {
     }
   }
 
-  async function removeTokens(engine: Host, entries: readonly Armed[]) {
-    const box = await engine.promptRead()
-    const text = entries.reduce(
-      (kept, entry) => withoutToken(kept, entry.token),
-      box.text,
-    )
-
-    if (text !== box.text) {
-      await engine.promptFill({ text, mode: 'replace' })
-    }
-  }
-
   /**
    * Drops the armed commits whose written token is no longer in the prompt's
    * text, so the gutter agrees with the box: on each edit the person makes,
-   * and at a redraw as a backstop.
+   * and at each sync as a backstop.
    */
   function reconcileArmed(engine: Host, text: string) {
     const gone = [...armed.values()].filter(
@@ -597,12 +583,7 @@ export function register(on: On) {
       await engine.closePane({ id: Names.PANE_ID })
     }
 
-    const box = await engine.promptRead()
-    const text = box.text.replace(TOKEN_PATTERN, '')
-
-    if (text !== box.text) {
-      await engine.promptFill({ text, mode: 'replace' })
-    }
+    await syncBox(engine)
   }
 
   on('command.run', { command: Names.COMMAND_NAME }, async ($, e, next) => {
@@ -803,16 +784,10 @@ export function register(on: On) {
     const { Box, Text, Button } = table
     const Client = 'Client' in table ? table.Client : undefined
 
-    if (!e.props.isFocused) {
-      await writeTokens(engine).catch(() => undefined)
-    }
-
-    if (hasWritten()) {
-      const box = await engine.promptRead().catch(() => null)
-
-      if (box) {
-        reconcileArmed(engine, box.text)
-      }
+    // While the composer holds the keys the person may have edited the box,
+    // and a token a refused fill left behind can be written now.
+    if (!e.props.isFocused && armed.size > 0) {
+      await syncBox(engine).catch(() => undefined)
     }
 
     model = {
@@ -835,8 +810,8 @@ export function register(on: On) {
       isOpen = false
       reset()
 
-      if (host) {
-        await writeTokens(host).catch(() => undefined)
+      if (host && armed.size > 0) {
+        await syncBox(host).catch(() => undefined)
       }
     }
 
