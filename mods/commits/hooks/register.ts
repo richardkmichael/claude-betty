@@ -25,7 +25,7 @@ import {
   commitOfKey,
   contentLinesOf,
   paneView,
-  visibleRowsOf,
+  windowOf,
   type DiffState,
   type LineRange,
   type PaneModel,
@@ -428,16 +428,21 @@ export function register(on: On) {
     await syncBox(engine).catch(() => undefined)
   }
 
-  /** Moves the content window by `delta` rows, clamped to the content. */
-  function moveTop(engine: Host, delta: number) {
-    const visible = visibleRowsOf(model)
-    const maxTop = Math.max(0, contentLinesOf(model).length - visible)
-    const top = Math.max(0, Math.min(maxTop, model.top + delta))
+  /**
+   * Places the content window's first row, clamped to the content.
+   *
+   * @returns whether it moved
+   */
+  function setTop(top: number): boolean {
+    const clamped = Math.max(0, Math.min(windowOf(model).maxTop, top))
 
-    if (top !== model.top) {
-      model = { ...model, top }
-      engine.invalidate()
+    if (clamped === model.top) {
+      return false
     }
+
+    model = { ...model, top: clamped }
+
+    return true
   }
 
   let syncing: Promise<void> = Promise.resolve()
@@ -731,8 +736,7 @@ export function register(on: On) {
       return next(e)
     }
 
-    const visible = visibleRowsOf(model)
-    const maxTop = Math.max(0, contentLinesOf(model).length - visible)
+    const { visible, maxTop } = windowOf(model)
     const size = Math.abs(e.by)
     const isEnd = size >= e.contentRows && e.contentRows > e.bodyRows
     const isPage = !isEnd && size >= e.bodyRows
@@ -744,7 +748,9 @@ export function register(on: On) {
         ? visible
         : size * (isWheel ? WHEEL_ROWS : 1)
 
-    moveTop(host, Math.sign(e.by) * step)
+    if (setTop(model.top + Math.sign(e.by) * step)) {
+      host.invalidate()
+    }
 
     return {}
   })
@@ -757,18 +763,25 @@ export function register(on: On) {
       return next(e)
     }
 
-    if (post.kind === 'scroll') {
-      moveTop(engine, post.by)
-    } else if (post.kind === 'move') {
-      selectBy(engine, post.by, post.wrap === true)
-    } else if (post.kind === 'ask') {
-      if (model.selectedSha !== null) {
-        await toggleAsk(engine, model.selectedSha)
-      }
-    } else if (post.kind === 'click') {
-      await disarmLinesAt(engine, post.at)
-    } else {
-      await armLines(engine, post.from, post.to)
+    switch (post.kind) {
+      case 'scroll':
+        // only the region moves, and the answer below redraws it
+        setTop(model.top + post.by)
+        break
+      case 'move':
+        selectBy(engine, post.by, post.wrap === true)
+        break
+      case 'ask':
+        if (model.selectedSha !== null) {
+          await toggleAsk(engine, model.selectedSha)
+        }
+        break
+      case 'click':
+        await disarmLinesAt(engine, post.at)
+        break
+      case 'select':
+        await armLines(engine, post.from, post.to)
+        break
     }
 
     return { props: clientPropsOf(model) }

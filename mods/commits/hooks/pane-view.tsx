@@ -189,14 +189,39 @@ export function visibleRowsOf(model: PaneModel): number {
   return Math.max(1, model.bodyRows - pinnedRowsOf(model))
 }
 
+/** The content last laid out and what it was laid out from, by identity. */
+let laidOut: {
+  commits: readonly Commit[]
+  selectedSha: string | null
+  diff: DiffState | undefined
+  lines: Line[]
+} | null = null
+
 /**
  * The content's rows for the selected commit: the message, then each file's
- * lines, one row each.
+ * lines, one row each. Laid out once per listing, selection and loaded
+ * patch, which the model replaces whole when they change; every redraw,
+ * scroll and post reads the same rows, so none may change them.
  *
  * @param model what the pane draws
  * @returns the rows, empty with no selection
  */
 export function contentLinesOf(model: PaneModel): Line[] {
+  const diff = model.selectedSha === null ? undefined : model.diffs[model.selectedSha]
+
+  if (
+    laidOut === null ||
+    laidOut.commits !== model.commits ||
+    laidOut.selectedSha !== model.selectedSha ||
+    laidOut.diff !== diff
+  ) {
+    laidOut = { commits: model.commits, selectedSha: model.selectedSha, diff, lines: layoutOf(model) }
+  }
+
+  return laidOut.lines
+}
+
+function layoutOf(model: PaneModel): Line[] {
   const commit = model.commits.find(
     candidate => candidate.sha === model.selectedSha,
   )
@@ -304,17 +329,44 @@ function diffLineOf(text: string): Pick<Line, 'text' | 'color'> {
 }
 
 /**
+ * The window over the selected commit's content: its rows, how many show at
+ * once, the first shown, and the furthest first row the content allows.
+ */
+export type ContentWindow = {
+  lines: readonly Line[]
+  visible: number
+  top: number
+  maxTop: number
+}
+
+/**
+ * The content window as the model places it, the top clamped to the content.
+ *
+ * @param model what the pane draws
+ * @returns the window
+ */
+export function windowOf(model: PaneModel): ContentWindow {
+  const lines = contentLinesOf(model)
+  const visible = visibleRowsOf(model)
+  const maxTop = Math.max(0, lines.length - visible)
+
+  return { lines, visible, top: Math.min(model.top, maxTop), maxTop }
+}
+
+/**
  * The diff region's props: the window of content lines it draws, where the
  * window starts, and the armed ranges of the selected commit. What the pane
  * draws it with, and what the `ui.message` hook hands it after a post.
  *
  * @param model what the pane draws
+ * @param window the content window, when the caller has it
  * @returns the props, plain data
  */
-export function clientPropsOf(model: PaneModel): DiffClientProps {
-  const lines = contentLinesOf(model)
-  const visible = visibleRowsOf(model)
-  const top = Math.min(model.top, Math.max(0, lines.length - visible))
+export function clientPropsOf(
+  model: PaneModel,
+  window: ContentWindow = windowOf(model),
+): DiffClientProps {
+  const { lines, visible, top } = window
 
   return {
     offset: top,
@@ -345,29 +397,21 @@ export function paneView(
   actions: PaneActions,
 ): RenderElement {
   const { Box, Text, Client } = ui
-  const lines = contentLinesOf(model)
-  const visible = visibleRowsOf(model)
-  const top = Math.min(model.top, Math.max(0, lines.length - visible))
-  const wanted = visible + SCROLL_MARGIN_ROWS
-  const shown = lines.slice(top, top + wanted)
-
-  while (shown.length < wanted) {
-    shown.push({ text: '', kind: 'blank' })
-  }
+  const window = windowOf(model)
 
   const content: RenderElement[] = Client
     ? [
         <Client
           key="diff"
           module="./diff-client.tsx"
-          height={visible}
-          props={clientPropsOf(model)}
+          height={window.visible}
+          props={clientPropsOf(model, window)}
         />,
         ...Array.from({ length: SCROLL_MARGIN_ROWS }, () => (
           <Text> </Text>
         )),
       ]
-    : shown.map(line => lineRow(ui, line))
+    : plainRowsOf(ui, window)
 
   const rows: RenderElement[] = model.commits.map(commit =>
     commitRow(ui, model, actions, commit),
@@ -390,6 +434,18 @@ export function paneView(
       {content}
     </Box>
   )
+}
+
+/** The window's rows as plain text, padded past the body like the region. */
+function plainRowsOf(ui: PaneUi, window: ContentWindow): RenderElement[] {
+  const wanted = window.visible + SCROLL_MARGIN_ROWS
+  const shown = window.lines.slice(window.top, window.top + wanted)
+
+  while (shown.length < wanted) {
+    shown.push({ text: '', kind: 'blank' })
+  }
+
+  return shown.map(line => lineRow(ui, line))
 }
 
 function headerRow(
