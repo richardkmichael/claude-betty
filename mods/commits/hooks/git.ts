@@ -122,18 +122,13 @@ async function defaultBranchOf(run: Run, cwd: string): Promise<string | null> {
     return remote.stdout.trim()
   }
 
-  for (const name of ['main', 'master']) {
-    const local = await run(
-      ['git', 'rev-parse', '--verify', '--quiet', `refs/heads/${name}`],
-      { cwd },
-    )
+  const local = await run(
+    ['git', 'for-each-ref', '--format=%(refname:short)', 'refs/heads/main', 'refs/heads/master'],
+    { cwd },
+  )
+  const names = local.stdout.split('\n').map(name => name.trim())
 
-    if (local.exitCode === 0) {
-      return name
-    }
-  }
-
-  return null
+  return ['main', 'master'].find(name => names.includes(name)) ?? null
 }
 
 /**
