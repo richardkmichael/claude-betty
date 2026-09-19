@@ -1,4 +1,5 @@
 import type { Commit, FileDiff } from './git'
+import { cutAtLine } from './git'
 import type { Line, LineKind } from './pane-view'
 import { ATTACHED_LEAD, ATTACHED_LEAD_LINES } from './names'
 
@@ -38,10 +39,7 @@ export function askTextOf(commit: Commit, files: readonly FileDiff[]): string {
     return text
   }
 
-  const room = text.slice(0, ASK_MAX_CHARS - CUT_TAIL.length - 1)
-  const kept = room.slice(0, Math.max(room.lastIndexOf('\n'), 0))
-
-  return `${kept}\n${CUT_TAIL}`
+  return `${cutAtLine(text, ASK_MAX_CHARS - CUT_TAIL.length - 1)}\n${CUT_TAIL}`
 }
 
 function fileElementOf(file: FileDiff): string[] {
