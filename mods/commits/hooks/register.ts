@@ -125,17 +125,15 @@ export function tokenOf(short: string): string {
 }
 
 /**
- * The token for a range of a commit's content lines: the count for the
- * person, the range for uniqueness among several of one commit.
+ * The token for a range of a commit's content lines: the commit, a colon,
+ * and the range, which keeps several ranges of one commit apart.
  *
  * @param short the commit's abbreviated sha
  * @param range the content lines, inclusive
  * @returns the token
  */
 export function linesTokenOf(short: string, range: LineRange): string {
-  const count = range.to - range.from + 1
-
-  return `[⧉ ${count} ${count === 1 ? 'line' : 'lines'} · ${short}:${range.from}-${range.to}]`
+  return `[⧉ ${short}:${range.from}-${range.to}]`
 }
 
 /** Any token of this plugin's in the prompt's text, with the space after it. */
@@ -1086,8 +1084,10 @@ function orientationOf(label: string, count: number): string {
     `The commits pane is open beside the transcript, listing ` +
     `${countOf(count)} (${label}). The user can select a commit and press ` +
     `${Names.ASK_HOTKEY} to attach its message and diff to their next prompt, ` +
-    `shown in their prompt as "${tokenOf('<sha>')}"; the attachment itself ` +
-    `begins "${Names.ATTACHED_LEAD}". Escape closes the pane while it has the ` +
+    `shown in their prompt as "${tokenOf('<sha>')}", or drag over lines of it ` +
+    `to attach those lines alone, shown as "[⧉ <sha>:<from>-<to>]"; the ` +
+    `attachment itself begins "${Names.ATTACHED_LEAD}" for a whole commit, or ` +
+    `"${Names.ATTACHED_LEAD_LINES}" for lines. Escape closes the pane while it has the ` +
     `keys, as does /commits again; the ${Names.CLOSE_TOOL_FULL_NAME} tool ` +
     `closes it too.`
   )

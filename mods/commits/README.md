@@ -55,7 +55,7 @@ own (a `Client` element, terminal and desktop only). Dragging over lines
 there arms that range: the lines get `⧉` in the region's gutter, the
 commit's row gets a yellow `⧉` (green once the whole commit is armed, which
 also drops its ranges), and
-`[⧉ N lines · <sha>:<from>-<to>]` is appended to the prompt box. A click on
+`[⧉ <sha>:<from>-<to>]` is appended to the prompt box. A click on
 an armed range disarms it; a click elsewhere only gives the region the
 keys. While the region holds them: ↑ ↓ `j` `k` PgUp PgDn scroll it, Tab,
 Shift+Tab and ctrl+↑/↓ move between commits, `a` arms or disarms the
