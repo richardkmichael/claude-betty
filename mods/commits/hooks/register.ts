@@ -59,14 +59,15 @@ type Host = {
  */
 type Armed = {
   key: string
-  kind: 'commit' | 'lines'
   sha: string
   short: string
   token: string
   text: string
   isWritten: boolean
-  range?: LineRange
-}
+} & ({ kind: 'commit' } | { kind: 'lines'; range: LineRange })
+
+/** An armed range of lines. */
+type ArmedLines = Armed & { kind: 'lines' }
 
 /** The model's `show` input once checked: what to list, and its notes by sha. */
 type ShowInput = {
@@ -164,35 +165,16 @@ export function register(on: On) {
    */
   const armed = new Map<string, Armed>()
 
-  function armedShas(): string[] {
-    return [...armed.values()]
-      .filter(entry => entry.kind === 'commit')
-      .map(entry => entry.sha)
-  }
-
-  function armedRangesOf(sha: string | null): LineRange[] {
-    return [...armed.values()]
-      .filter(entry => entry.kind === 'lines' && entry.sha === sha)
-      .map(entry => entry.range)
-      .filter((range): range is LineRange => range !== undefined)
-  }
-
-  function partlyArmedShas(): string[] {
-    return [...new Set(
-      [...armed.values()]
-        .filter(entry => entry.kind === 'lines')
-        .map(entry => entry.sha),
-    )]
+  /** The armed ranges of a commit's lines. */
+  function linesArmedOf(sha: string | null): ArmedLines[] {
+    return [...armed.values()].filter(
+      (entry): entry is ArmedLines => entry.kind === 'lines' && entry.sha === sha,
+    )
   }
 
   /** Brings the model's armed marks in step with `armed`. */
   function syncArmed() {
-    model = {
-      ...model,
-      armedShas: armedShas(),
-      partlyArmedShas: partlyArmedShas(),
-      armedRanges: armedRangesOf(model.selectedSha),
-    }
+    model = { ...model, armed: [...armed.values()] }
   }
 
   function reset() {
@@ -238,9 +220,7 @@ export function register(on: On) {
       commits,
       notes: notesFor(commits, notes),
       selectedSha,
-      armedShas: armedShas(),
-      partlyArmedShas: partlyArmedShas(),
-      armedRanges: armedRangesOf(selectedSha),
+      armed: [...armed.values()],
     }
 
     try {
@@ -317,7 +297,7 @@ export function register(on: On) {
       return
     }
 
-    model = { ...model, selectedSha: sha, top: 0, armedRanges: armedRangesOf(sha) }
+    model = { ...model, selectedSha: sha, top: 0 }
     engine.invalidate()
     void loadDiff(engine, sha)
 
@@ -442,13 +422,8 @@ export function register(on: On) {
 
   /** Disarms the armed range of the selected commit that holds a content line. */
   async function disarmLinesAt(engine: Host, at: number) {
-    const entry = [...armed.values()].find(
-      candidate =>
-        candidate.kind === 'lines' &&
-        candidate.sha === model.selectedSha &&
-        candidate.range !== undefined &&
-        at >= candidate.range.from &&
-        at <= candidate.range.to,
+    const entry = linesArmedOf(model.selectedSha).find(
+      candidate => at >= candidate.range.from && at <= candidate.range.to,
     )
 
     if (entry) {

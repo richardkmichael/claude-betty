@@ -36,9 +36,9 @@ export type DiffState =
 
 /**
  * What the pane draws: the listing, the model's notes by full sha, each
- * loaded patch by sha, the selected commit, the commits armed to ride the
- * next prompt, and the content window's first row over the room the pane
- * last had.
+ * loaded patch by sha, the selected commit, what is armed to ride the next
+ * prompt, and the content window's first row over the room the pane last
+ * had.
  */
 export type PaneModel = {
   label: string
@@ -46,15 +46,17 @@ export type PaneModel = {
   notes: Readonly<Record<string, string>>
   diffs: Readonly<Record<string, DiffState>>
   selectedSha: string | null
-  /** The commits armed whole. */
-  armedShas: readonly string[]
-  /** The commits with some lines armed. */
-  partlyArmedShas: readonly string[]
-  /** The armed line ranges of the selected commit. */
-  armedRanges: readonly LineRange[]
+  /** Each armed thing: a whole commit, or with `range` some of its lines. */
+  armed: readonly ArmedMark[]
   top: number
   bodyRows: number
   bodyColumns: number
+}
+
+/** An armed commit by sha, whole without a range, some of its lines with one. */
+export type ArmedMark = {
+  sha: string
+  range?: LineRange
 }
 
 /**
@@ -131,9 +133,7 @@ export const EMPTY_MODEL: PaneModel = {
   notes: {},
   diffs: {},
   selectedSha: null,
-  armedShas: [],
-  partlyArmedShas: [],
-  armedRanges: [],
+  armed: [],
   top: 0,
   bodyRows: 0,
   bodyColumns: 80,
@@ -324,7 +324,9 @@ export function clientPropsOf(model: PaneModel): DiffClientProps {
       ...(line.bold ? { bold: true } : {}),
       ...(line.dim ? { dim: true } : {}),
     })),
-    armed: model.armedRanges.map(range => ({ ...range })),
+    armed: model.armed.flatMap(mark =>
+      mark.sha === model.selectedSha && mark.range !== undefined ? [{ ...mark.range }] : [],
+    ),
   }
 }
 
@@ -451,8 +453,9 @@ function commitRow(
 ): RenderElement {
   const { Box, Text, Button } = ui
   const isSelected = commit.sha === model.selectedSha
-  const isWholeArmed = model.armedShas.includes(commit.sha)
-  const isPartlyArmed = !isWholeArmed && model.partlyArmedShas.includes(commit.sha)
+  const marks = model.armed.filter(mark => mark.sha === commit.sha)
+  const isWholeArmed = marks.some(mark => mark.range === undefined)
+  const isPartlyArmed = marks.length > 0
   const note = model.notes[commit.sha]
   const room = Math.max(8, model.bodyColumns - GUTTER.length - 1)
   const label = truncated(`${commit.short} ${sanitize(commit.subject)}`, room)
