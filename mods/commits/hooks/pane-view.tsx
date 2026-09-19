@@ -52,7 +52,10 @@ export type PaneModel = {
   notes: Readonly<Record<string, string>>
   diffs: Readonly<Record<string, DiffState>>
   selectedSha: string | null
+  /** The commits armed whole. */
   armedShas: readonly string[]
+  /** The commits with some lines armed. */
+  partlyArmedShas: readonly string[]
   /** The armed line ranges of the selected commit. */
   armedRanges: readonly LineRange[]
   top: number
@@ -89,6 +92,12 @@ export const POINTER = '❯'
 /** An armed row's mark, in the gutter's third column. */
 export const ARMED_MARK = '⧉'
 
+/** The mark's colour when the whole commit is armed. */
+export const WHOLE_ARMED_COLOR = 'green'
+
+/** The mark's colour when only some of the commit's lines are armed. */
+export const LINES_ARMED_COLOR = 'yellow'
+
 /** The gutter before a commit row: pointer, space, armed mark, space. */
 const GUTTER = `${POINTER} ${ARMED_MARK} `
 
@@ -106,6 +115,7 @@ export const EMPTY_MODEL: PaneModel = {
   diffs: {},
   selectedSha: null,
   armedShas: [],
+  partlyArmedShas: [],
   armedRanges: [],
   top: 0,
   bodyRows: 0,
@@ -395,7 +405,8 @@ function commitRow(
 ): RenderElement {
   const { Box, Text, Button } = ui
   const isSelected = commit.sha === model.selectedSha
-  const isArmed = model.armedShas.includes(commit.sha)
+  const isWholeArmed = model.armedShas.includes(commit.sha)
+  const isPartlyArmed = !isWholeArmed && model.partlyArmedShas.includes(commit.sha)
   const note = model.notes[commit.sha]
   const room = Math.max(8, model.bodyColumns - GUTTER.length - 1)
   const label = truncated(`${commit.short} ${sanitize(commit.subject)}`, room)
@@ -404,7 +415,9 @@ function commitRow(
     <Box flexDirection="row">
       <Text>{isSelected ? POINTER : ' '}</Text>
       <Text> </Text>
-      <Text color="cyan">{isArmed ? ARMED_MARK : ' '}</Text>
+      <Text color={isWholeArmed ? WHOLE_ARMED_COLOR : LINES_ARMED_COLOR}>
+        {isWholeArmed || isPartlyArmed ? ARMED_MARK : ' '}
+      </Text>
       <Text> </Text>
       <Button
         key={commitKeyOf(commit)}

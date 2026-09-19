@@ -795,6 +795,13 @@ describe('register', () => {
     expect(world.box.text).toBe(`${token} `)
     expect(await ui.find({ in: 'diff', text: /⧉/ }), 'the armed mark in the gutter').toBeDefined()
 
+    const partly = JSON.stringify(await $.ui.render(PANE))
+
+    expect(partly, "the row's mark is yellow for lines only").toContain(
+      '{"color":"yellow"},"children":["⧉"]',
+    )
+    expect(partly).not.toContain('{"color":"green"},"children":["⧉"]')
+
     await $.prompt.submit({
       text: `${world.box.text}Why this change?`,
       wait: false,

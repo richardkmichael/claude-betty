@@ -179,11 +179,20 @@ export function register(on: On) {
       .filter((range): range is LineRange => range !== undefined)
   }
 
+  function partlyArmedShas(): string[] {
+    return [...new Set(
+      [...armed.values()]
+        .filter(entry => entry.kind === 'lines')
+        .map(entry => entry.sha),
+    )]
+  }
+
   /** Brings the model's armed marks in step with `armed`. */
   function syncArmed() {
     model = {
       ...model,
       armedShas: armedShas(),
+      partlyArmedShas: partlyArmedShas(),
       armedRanges: armedRangesOf(model.selectedSha),
     }
   }
@@ -232,6 +241,7 @@ export function register(on: On) {
       notes: notesFor(commits, notes),
       selectedSha,
       armedShas: armedShas(),
+      partlyArmedShas: partlyArmedShas(),
       armedRanges: armedRangesOf(selectedSha),
     }
 

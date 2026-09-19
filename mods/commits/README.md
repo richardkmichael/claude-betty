@@ -42,7 +42,7 @@ row. `ctrl+x tab` gives a pane the keys later; `ctrl+x x` closes one.
 | `a`                  | attach the selected commit to the next prompt, or detach |
 | Esc                  | close the pane                                            |
 
-Pressing `a` arms the selected commit: the row gets `⧉` in the gutter and
+Pressing `a` arms the selected commit: the row gets a green `⧉` in the gutter and
 `[⧉ commit <sha>]` is appended to the prompt box at once. The engine gives
 the keyboard to a non-empty composer, so `ctrl+x tab` returns to the pane.
 Pressing `a` again on an armed commit disarms it and takes its token out.
@@ -52,7 +52,8 @@ own pasted-text placeholders; clear the box or send first.
 
 The selected commit's message and diff are drawn in a region of the pane's
 own (a `Client` element, terminal and desktop only). Dragging over lines
-there arms that range: the lines get `⧉` in the region's gutter and
+there arms that range: the lines get `⧉` in the region's gutter, the
+commit's row gets a yellow `⧉`, and
 `[⧉ N lines · <sha>:<from>-<to>]` is appended to the prompt box. A click on
 an armed range disarms it; a click elsewhere only gives the region the
 keys. While the region holds them: ↑ ↓ `j` `k` PgUp PgDn scroll it, Tab,
