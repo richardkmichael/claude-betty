@@ -3,7 +3,7 @@
 /* @jsxFrag Fragment */
 import type { ClientProps, ElementConstructor, ElementTable, RenderElement } from 'claude-code'
 
-import type { DiffClientProps } from './diff-client'
+import type { DiffClientProps, LineRange } from './diff-client'
 import type { Commit, FileDiff } from './git'
 import { sanitize } from './git'
 import {
@@ -15,6 +15,8 @@ import {
   countOf,
 } from './names'
 
+export type { LineRange } from './diff-client'
+
 /**
  * The elements the pane draws with: the three every surface has, and the
  * `Client` the terminal and the desktop have, which draws the diff region;
@@ -22,15 +24,6 @@ import {
  */
 export type PaneUi = Pick<ElementTable<'terminal'>, 'Box' | 'Text' | 'Button'> & {
   Client?: ElementConstructor<ClientProps>
-}
-
-/**
- * A range of content lines armed to ride the next prompt, by index into the
- * selected commit's content, inclusive.
- */
-export type LineRange = {
-  from: number
-  to: number
 }
 
 /**
