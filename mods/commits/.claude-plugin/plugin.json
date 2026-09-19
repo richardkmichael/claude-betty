@@ -1,0 +1,8 @@
+{
+  "name": "commits",
+  "version": "0.1.0",
+  "description": "/commits opens a pane beside the transcript listing the branch's commits, each with its message and diff; Claude can open it too, with commits of its choosing and a note beside each; a commit the user asks about rides their next prompt.",
+  "author": {
+    "name": "Richard Michael"
+  }
+}

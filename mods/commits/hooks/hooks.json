@@ -1,0 +1,4 @@
+{
+  "description": "The commits pane: /commits and the model's show tool open it, its Pane drawing lists the commits and the selected one's diff, and the ask button rides a commit on the next prompt",
+  "modules": ["./register.ts"]
+}
