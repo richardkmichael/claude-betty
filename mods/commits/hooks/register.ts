@@ -668,7 +668,7 @@ export function register(on: On) {
     }
 
     return {
-      text: `${Names.PANEL_SHOWN_TEXT}: ${countOf(shown.count)} in ${selection.label}`,
+      text: `${Names.PANEL_SHOWN_TEXT}: ${Names.countOf(shown.count)} in ${selection.label}`,
       context: [orientationOf(selection.label, shown.count)],
     }
   })
@@ -701,7 +701,7 @@ export function register(on: On) {
 
     return {
       result:
-        `Showing ${countOf(shown.count)} (${selection.label}) in the ` +
+        `Showing ${Names.countOf(shown.count)} (${selection.label}) in the ` +
         `commits pane. ${orientationOf(selection.label, shown.count)}`,
     }
   })
@@ -1080,7 +1080,7 @@ function notesFor(
 function orientationOf(label: string, count: number): string {
   return (
     `The commits pane is open beside the transcript, listing ` +
-    `${countOf(count)} (${label}). The user can select a commit and press ` +
+    `${Names.countOf(count)} (${label}). The user can select a commit and press ` +
     `${Names.ASK_HOTKEY} to attach its message and diff to their next prompt, ` +
     `shown in their prompt as "${tokenOf('<sha>')}", or drag over lines of it ` +
     `to attach those lines alone, shown as "[⧉ <sha>:<from>-<to>]"; a whole ` +
@@ -1090,10 +1090,6 @@ function orientationOf(label: string, count: number): string {
     `keys, as does /commits again; the ${Names.CLOSE_TOOL_FULL_NAME} tool ` +
     `closes it too.`
   )
-}
-
-function countOf(count: number): string {
-  return count === 1 ? '1 commit' : `${count} commits`
 }
 
 /** Text the model or the user typed, safe on one transcript line. */

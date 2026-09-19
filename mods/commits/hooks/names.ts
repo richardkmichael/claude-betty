@@ -61,3 +61,14 @@ export const ATTACHED_LEAD = 'The user attached commit'
 
 /** How an attached line range's context block begins. */
 export const ATTACHED_LEAD_LINES = 'The user attached'
+
+/**
+ * A count of commits as the pane, the transcript and a selection's label
+ * say it.
+ *
+ * @param count the commits
+ * @returns `1 commit` or `N commits`
+ */
+export function countOf(count: number): string {
+  return count === 1 ? '1 commit' : `${count} commits`
+}

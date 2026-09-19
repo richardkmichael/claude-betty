@@ -12,6 +12,7 @@ import {
   HELP_TEXT,
   LIST_DOWN_ACTION,
   LIST_UP_ACTION,
+  countOf,
 } from './names'
 
 /**
@@ -402,8 +403,7 @@ function headerRow(
   actions: PaneActions,
 ): RenderElement {
   const { Box, Text, Button } = ui
-  const count =
-    model.commits.length === 1 ? '1 commit' : `${model.commits.length} commits`
+  const count = countOf(model.commits.length)
   const selected = model.commits.find(
     commit => commit.sha === model.selectedSha,
   )

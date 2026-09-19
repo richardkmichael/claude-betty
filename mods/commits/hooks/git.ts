@@ -1,5 +1,7 @@
 import type { ProcessRunInit, ProcessRunResult } from 'claude-code'
 
+import { countOf } from './names'
+
 /**
  * Runs a child process: `$.process.run` as the plugin binds it.
  */
@@ -151,9 +153,7 @@ export function rangeSelectionOf(range: string): Selection {
  * @returns the selection
  */
 export function commitsSelectionOf(shas: readonly string[]): Selection {
-  const label = shas.length === 1 ? '1 commit' : `${shas.length} commits`
-
-  return { label, argv: ['--no-walk=unsorted', ...shas] }
+  return { label: countOf(shas.length), argv: ['--no-walk=unsorted', ...shas] }
 }
 
 /**
