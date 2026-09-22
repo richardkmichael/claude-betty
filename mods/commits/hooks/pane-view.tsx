@@ -127,6 +127,9 @@ const GUTTER = `${POINTER} ${ARMED_MARK} `
  */
 export const SCROLL_MARGIN_ROWS = 8
 
+/** Rows of padding above the header, inside the pane's body, as the native diff sidebar has. */
+export const TOP_PADDING_ROWS = 1
+
 export const EMPTY_MODEL: PaneModel = {
   label: '',
   commits: [],
@@ -175,7 +178,7 @@ export function pinnedRowsOf(model: PaneModel): number {
     commit => model.notes[commit.sha] !== undefined,
   ).length
 
-  return 1 + 1 + Math.max(1, model.commits.length) + noteRows + 1
+  return TOP_PADDING_ROWS + 1 + 1 + Math.max(1, model.commits.length) + noteRows + 1
 }
 
 /**
@@ -426,7 +429,7 @@ export function paneView(
   }
 
   return (
-    <Box flexDirection="column" gap={1}>
+    <Box flexDirection="column" gap={1} paddingTop={TOP_PADDING_ROWS}>
       {headerRow(ui, model, actions)}
       <Box flexDirection="column">{rows}</Box>
       <Box flexDirection="column">{content}</Box>

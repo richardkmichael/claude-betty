@@ -49,10 +49,10 @@ const FOCUSED_PANE: RenderInput<'Pane'> = {
   props: { ...PANE.props, isFocused: true },
 }
 
-/** The pane with eight body rows: five pinned rows and a three-row window. */
+/** The pane with nine body rows: six pinned rows and a three-row window. */
 const SHORT_PANE: RenderInput<'Pane'> = {
   ...PANE,
-  props: { ...PANE.props, scroll: { offset: 0, bodyRows: 8 } },
+  props: { ...PANE.props, scroll: { offset: 0, bodyRows: 9 } },
 }
 
 /** One arrow press down while the pane has the keys. */
@@ -61,7 +61,7 @@ const ARROW_DOWN: UiScrollInput = {
   requestId: Names.PANE_ID,
   offset: 1,
   by: 1,
-  bodyRows: 8,
+  bodyRows: 9,
   contentRows: 20,
   origin: { kind: 'person' },
 }
