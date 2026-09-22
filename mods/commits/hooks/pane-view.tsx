@@ -164,8 +164,8 @@ export function commitOfKey(
 }
 
 /**
- * The rows the header, the blank line under it, the list and the blank line
- * under that take, above the content window.
+ * The rows the header, the gap under it, the list and the gap under that
+ * take, above the content window.
  *
  * @param model what the pane draws
  * @returns the row count
@@ -426,12 +426,10 @@ export function paneView(
   }
 
   return (
-    <Box flexDirection="column">
+    <Box flexDirection="column" gap={1}>
       {headerRow(ui, model, actions)}
-      <Text> </Text>
-      {rows}
-      <Text> </Text>
-      {content}
+      <Box flexDirection="column">{rows}</Box>
+      <Box flexDirection="column">{content}</Box>
     </Box>
   )
 }
