@@ -112,8 +112,9 @@ compacted away from this conversation specifically, rather than searching the wh
 
 The bundled JSON Schema (`references/claude-code-session-transcript.schema.json`) documents every
 record type, field, and enum. Consult it to write ad-hoc queries beyond the standard verbs, for
-correct field paths, record types, and subtypes. It is a snapshot reference, not loaded at runtime;
-regenerate it from source when the transcript format drifts.
+correct field paths, record types, and subtypes. Attachment payloads are described per subtype, as
+`attachment_<subtype>` definitions. It is a snapshot reference, not loaded at runtime, and is
+refreshed from its upstream copy with `maintenance/sync-schema.sh`.
 
 For how compaction, microcompaction, forks, and clear-context are recorded, and which content is out
 of context, see `references/compaction-internals.md`.
