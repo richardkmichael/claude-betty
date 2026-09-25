@@ -375,8 +375,7 @@ git diff            # unstaged changes
 git diff --cached   # already staged changes
 ```
 
-Read the diffs carefully. Understand what each change does. Group them mentally
-into logical units by change type.
+Group the changes into logical units by change type.
 
 ### 2. Plan the Commit Sequence
 
@@ -385,8 +384,6 @@ Before touching git, decide:
 - How many commits?
 - What goes in each? (apply the decomposition principles above)
 - What order? (apply the ordering rules above)
-
-State your plan briefly before executing.
 
 ### 3. Stage Selectively
 
@@ -745,30 +742,6 @@ with "is not a stash reference" -- so the SHA is how you recognize your entry,
 never how you remove it.
 
 
-## Decision Framework: Decomposing a Body of Work
-
-When looking at a set of changes to commit, work through this checklist:
-
-1. Are there bug fixes? Separate them out. They go first.
-2. Are there pure formatting/whitespace changes? Separate them.
-3. Are there renames (variables, functions, files) of symbols already on the
-   target branch? Separate them from functional changes. A symbol this branch
-   introduces takes its final name in its introducing commit (see Never Mix
-   Change Types).
-4. Are there refactoring changes needed to enable a feature? Separate them.
-   They come before the feature.
-5. Are there API/interface changes? Separate them from the code that uses
-   the new API.
-6. What is the core change? This is your main commit (or main sequence).
-7. Are there tests and docs? They accompany the code they cover -- same commit,
-   not a trailing commit.
-
-For each candidate commit, verify:
-- Can I describe it in one sentence?
-- Does it contain exactly one type of change?
-- Would the project build and work after just this commit?
-
-
 ## Examples
 
 <examples>
@@ -894,22 +867,6 @@ it was introduced, not at commit 3 where it was wired into production.
 
 <example>
 
-### Preparatory Refactoring Followed by Feature
-
-You need to add caching to the API, but the current code structure makes it
-awkward. You refactor first.
-
-Commit sequence:
-1. "Extract request handling into dedicated method" -- preparatory refactoring
-2. "Add response cache with TTL-based invalidation" -- the feature
-
-A reviewer understands why the refactoring happened: it enabled the caching.
-And if the caching is later reverted, the clean refactoring stands on its own.
-
-</example>
-
-<example>
-
 ### Splitting a Commit After the Fact
 
 Accidentally committed a refactoring and a bug fix together. Rebase with that
@@ -920,22 +877,6 @@ commit marked `edit`; at the stop:
    validation into dedicated function".
 3. Apply the bug-fix hunks and commit: "Fix boundary check in date validation".
 4. `git rebase --continue`.
-
-</example>
-
-<example>
-
-### Reordering for Clarity
-
-Committed in this order:
-1. "Add caching to API" (depends on cache utility)
-2. "Add cache utility module" (should come first)
-3. "Fix typo in README"
-
-Rebase to:
-1. "Fix typo in README" (unrelated, first)
-2. "Add cache utility module" (foundation)
-3. "Add caching to API" (uses the utility)
 
 </example>
 
