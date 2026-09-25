@@ -51,11 +51,25 @@ Take the format from these sources, in this order:
    discernible convention, write an imperative subject under ~72 characters and
    a body wrapped at 72.
 
-## The subject says what; the body says why
+## 3. Fit the length to the change
 
-The subject is a one-line summary of the change. The body -- the part that
-matters -- is written for the future developer who must modify this code and
-needs the intent behind it.
+The diff already shows what changed. The message explains what the diff cannot:
+why. How long it runs depends on how much of that there is. A simple change may
+need only the subject, or a sentence or two. A subtle bug, a non-obvious design,
+or a complex implementation is often worth two or three paragraphs: what goes
+wrong and under what conditions, why this change addresses the cause, and what a
+future reader must know to avoid breaking it.
+
+A message becomes verbose when it repeats what the diff already carries, not
+when it runs long. Every sentence must tell the reader something the diff does
+not. Do not narrate the diff file by file, list the functions touched, or
+restate the subject in the body. A long body on a simple change usually means
+one of these, or two unrelated concerns that belong in separate commits.
+
+## 4. The subject says what; the body says why
+
+The subject is a one-line summary of the change. The body is written for the
+future developer who must modify this code and needs the intent behind it.
 
 > "The log message that explains your changes is just as important as the
 > changes themselves." -- the Git project
@@ -70,10 +84,10 @@ A good body does three things, in order:
 3. Note discarded alternatives, if any, so a future reader doesn't re-tread
    approaches already ruled out.
 
-Write the body in the imperative mood, as an instruction to the codebase:
-"Make the parser accept empty input", not "I made" or "This patch makes". When
-the body breaks into distinct points, prefer one bullet per point, each stating
-the change and its reason together -- terse, but every bullet carrying its why.
+Write the body in the imperative mood, as an instruction to the codebase: "Make
+the parser accept empty input", not "I made" or "This patch makes". When the
+body breaks into distinct points, use one bullet per point, each stating the
+change and its reason together.
 
 Keep it self-contained: summarize the relevant points of a discussion rather
 than linking to a thread or issue that may rot. When referring to another
@@ -85,7 +99,7 @@ the work ("comprehensive", "elegant", "long-standing gap") or describe what is
 *not* in the commit. Use plain peer language a reviewer would use at a
 whiteboard, not academic or business register.
 
-## Formatting code in the message
+## 5. Formatting code in the message
 
 Follow stated conventions where they cover formatting. Otherwise use these
 defaults; history is too inconsistent to infer code formatting from.
