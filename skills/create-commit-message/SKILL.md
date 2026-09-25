@@ -31,19 +31,25 @@ split, not that the message should stretch to cover it.
 
 ## 2. Match the project's convention
 
-The existing history is the ground truth for format:
+Take the format from these sources, in this order:
 
-```bash
-git log --oneline -20   # subject style: prefixes, length, ticket refs
-git log -5              # full bodies: trailers, wrapping, tense
-```
+1. Stated conventions: CLAUDE.md, a `CONTRIBUTING` file, a commit template
+   (`.gitmessage`), a commit-lint config (commitlint, gitlint). Where they
+   speak, they win over everything below, including this skill's defaults.
+2. The existing history, for whatever stated conventions leave open:
 
-Match what you observe -- Conventional Commits (`feat(scope): ...`), subsystem
-prefixes (`net: ...`), ticket references (`[PROJ-123] ...`), subject length,
-body width, trailer format (`Signed-off-by:`, `Reviewed-by:`, `Fixes:`),
-capitalization, punctuation, tense. Honor a `CONTRIBUTING` file or a commit-lint
-config if one is present. With no discernible convention, fall back to an
-imperative subject under ~72 characters and a body wrapped at 72.
+   ```bash
+   git log --oneline -20   # subject style: prefixes, length, ticket refs
+   git log -5              # full bodies: trailers, wrapping, tense
+   ```
+
+   Match what you observe: Conventional Commits (`feat(scope): ...`),
+   subsystem prefixes (`net: ...`), ticket references (`[PROJ-123] ...`),
+   subject length, body width, trailer format, capitalization, punctuation,
+   tense.
+3. The defaults in this skill, where neither settles a point. With no
+   discernible convention, write an imperative subject under ~72 characters and
+   a body wrapped at 72.
 
 ## The subject says what; the body says why
 
@@ -81,18 +87,17 @@ whiteboard, not academic or business register.
 
 ## Formatting code in the message
 
-Follow the project's or team's commit-message guidelines where they cover
-formatting. Absent that -- and commit history doesn't count, it's too
-inconsistent to infer from -- default to:
+Follow stated conventions where they cover formatting. Otherwise use these
+defaults; history is too inconsistent to infer code formatting from.
 
-- Wrap code tokens -- identifiers, commands, flags, paths, and short single-line
-  statements like `export ENV=foo` or `let a = 10;` -- in single backticks. They
+- Wrap code tokens (identifiers, commands, flags, paths, and short single-line
+  statements like `export ENV=foo` or `let a = 10;`) in single backticks. They
   render as code on GitHub, GitLab, and most web forges, and a single backtick
   reads cleanly as plain text in `git log`.
-- Reach for a fenced block (with a language specifier, Markdown-style) only when
-  a snippet shows something the diff does not -- a command to reproduce, a
-  clarifying before/after, an error message, an external config. Never fence code
-  that merely restates the diff. Most messages need only prose and inline
+- Use a fenced block (with a language specifier, Markdown-style) only when a
+  snippet shows something the diff does not: a command to reproduce, a
+  clarifying before/after, an error message, an external config. Never fence
+  code that merely restates the diff. Most messages need only prose and inline
   backticks.
 
 ## Output
