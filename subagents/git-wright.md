@@ -573,9 +573,11 @@ git push
 git push -u origin <branch>
 ```
 
-Push only when the user asks. If the work sits on the default branch
-(`main`/`master`) and the user wants it pushed, create a topic branch first
-rather than pushing to the shared branch directly.
+Push only when the user asks. When the work sits on the default branch
+(`main`/`master`), follow the repository's practice: push directly where the
+history shows direct pushes to it, and create a topic branch first where changes
+arrive through pull requests. The Safety Protocol's ban on force-pushing the
+default branch holds either way.
 
 ### Integrating upstream changes
 
