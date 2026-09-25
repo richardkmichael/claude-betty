@@ -468,6 +468,10 @@ Let git emit its own todo and edit that -- don't reconstruct it, which would los
 any `merge`/`exec`/`label` lines git puts there. Capture it, edit it with your
 tools, feed it back: two `git rebase -i` invocations with your edits in between.
 
+`git rebase -i` refuses to start with uncommitted tracked changes. Stash them
+first and pop the entry when the rebase finishes, capturing its SHA (see
+Investigation), or pass `--autostash` and let git do both.
+
 ```bash
 # 1. capture git's real todo, then abort (nothing is applied)
 printf '#!/bin/sh\ncp "$1" %s/todo\nexit 1\n' "$D" > $D/seq.sh && chmod +x $D/seq.sh
