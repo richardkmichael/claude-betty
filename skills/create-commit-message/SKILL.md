@@ -74,15 +74,17 @@ future developer who must modify this code and needs the intent behind it.
 > "The log message that explains your changes is just as important as the
 > changes themselves." -- the Git project
 
-A good body does three things, in order:
+A good body does two things, in order:
 
-1. State the problem in the present tense: what is wrong with the current code.
-   Write "The parser rejects empty input", not "used to reject"; by convention
-   the status quo is the code without this change, so there's no need to write
-   "Currently".
+1. State the problem in the present tense: what is wrong with the code as it
+   stands. Write "The parser rejects empty input", not "used to reject". By
+   convention the status quo is the code without this change, so there's no
+   need to write "Currently".
 2. Justify the change: why the result is better than the status quo.
-3. Note discarded alternatives, if any, so a future reader doesn't re-tread
-   approaches already ruled out.
+
+Leave out alternatives that were considered and rejected, and the path that led
+to the change. The message describes the change as it stands; that history
+belongs in the pull request description.
 
 Write the body in the imperative mood, as an instruction to the codebase: "Make
 the parser accept empty input", not "I made" or "This patch makes". When the
