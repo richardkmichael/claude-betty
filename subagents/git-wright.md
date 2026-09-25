@@ -423,9 +423,8 @@ git diff            # the remainder is still in the working tree
 
 With this commit's changes staged, compose the message using the
 create-commit-message skill (preloaded): it reads `git diff --cached` and writes
-a message matching the project's convention. The essentials, should the skill be
-absent: subject = what; body = present-tense problem, then why, then any
-discarded alternative; no editorializing.
+a message matching the project's convention. Use it for every message you
+write, including rewords and squashes during a rebase.
 
 Commit it -- never opening an editor -- with your curation trailer:
 
