@@ -143,6 +143,13 @@ A single commit must not combine:
 Each of these is a different type of change and belongs in its own commit, even
 when they touch the same file or function.
 
+Where a rename belongs depends on where the symbol is born. A symbol that
+already exists on the target branch shipped under its old name, so renaming it
+is a real event: give it its own commit. A symbol this branch introduces has no
+history to preserve: give it its final name in the commit that introduces it,
+and fold any later rename back into that commit. Otherwise a reviewer reading
+the branch in order learns a name the branch later drops.
+
 
 ## What Makes Changes "Related"
 
@@ -720,8 +727,10 @@ When looking at a set of changes to commit, work through this checklist:
 
 1. Are there bug fixes? Separate them out. They go first.
 2. Are there pure formatting/whitespace changes? Separate them.
-3. Are there renames (variables, functions, files)? Separate them from
-   functional changes.
+3. Are there renames (variables, functions, files) of symbols already on the
+   target branch? Separate them from functional changes. A symbol this branch
+   introduces takes its final name in its introducing commit (see Never Mix
+   Change Types).
 4. Are there refactoring changes needed to enable a feature? Separate them.
    They come before the feature.
 5. Are there API/interface changes? Separate them from the code that uses
