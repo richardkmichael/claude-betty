@@ -92,9 +92,20 @@ body breaks into distinct points, use one bullet per point, each stating the
 change and its reason together.
 
 Keep it self-contained: summarize the relevant points of a discussion rather
-than linking to a thread or issue that may rot. When referring to another
-commit, name it as `abbreviated-hash (subject, date)` -- e.g.
-`f86a374 (pack-bitmap.c: fix a memleak, 2015-03-30)`.
+than linking to a thread or issue that may rot.
+
+Do not cite commits by hash, with one exception. A fix for a defect that a
+commit already on the target branch introduced names that commit, in the
+project's form where it has one (the kernel's `Fixes:` trailer), otherwise as
+`abbreviated-hash (subject, date)`, e.g.
+`f86a374 (pack-bitmap.c: fix a memleak, 2015-03-30)`. That commit has shipped,
+so its hash is stable, and the citation tells a reader where the bug came from.
+
+Never cite a commit on the same branch. Each commit on a branch is an atomic
+unit that explains itself, and the branch reads in order, one commit after
+another: a commit that uses a function introduced earlier describes its own
+change, and the reader has already seen the function. Those hashes also change
+on every rebase, so the citation soon points at nothing.
 
 Avoid editorializing. State what the change does and why; do not characterize
 the work ("comprehensive", "elegant", "long-standing gap") or describe what is
