@@ -135,9 +135,8 @@ trailers the convention doesn't call for.
 
 ## Examples
 
-These are verbatim from their projects, which write tokens bare. They illustrate
-body structure -- problem, justification, discarded alternative -- not
-formatting; apply the inline-backtick rule above to your own messages.
+Adapted from real commits in PostgreSQL, Git, and the Linux kernel, rewritten to
+follow the rules above.
 
 <examples>
 
@@ -145,45 +144,35 @@ formatting; apply the inline-backtick rule above to your own messages.
 
 ### Bug fix: problem, then justification
 
-Adapted from a real PostgreSQL commit, with project-specific trailers removed:
-
 ```
-Improve plpgsql's error messages for incorrect %TYPE and %ROWTYPE.
+Improve plpgsql's error messages for incorrect %TYPE and %ROWTYPE
 
-If one of these constructs referenced a nonexistent object, we'd fall
-through to feeding the whole construct to the core parser, which would
-reject it with a "syntax error" message.  That's pretty unhelpful and
-misleading.  There's no good reason for plpgsql_parse_wordtype and
-friends not to throw a useful error for incorrect input, so make them
-do that instead of returning NULL.
+When one of these constructs references a nonexistent object, the whole
+construct falls through to the core parser, which rejects it with an
+unhelpful and misleading "syntax error". Make `plpgsql_parse_wordtype()`
+and friends throw a useful error for incorrect input instead of
+returning NULL.
 ```
 
-The body states the problem in the present tense -- the fall-through produces a
-misleading "syntax error" -- then justifies the fix ("no good reason ... not to
-throw a useful error"). It stands on its own, with no link to a discussion.
+The first sentence states the problem in the present tense. The second makes
+the fix as an instruction. It stands on its own, with no link to a discussion.
 
 </example>
 
 <example>
 
-### Refactor with a discarded alternative
-
-Adapted from a real Git commit, with sign-off trailers removed:
+### Refactor: the justification is what comes next
 
 ```
 commit: allow parsing arbitrary buffers with headers
 
-Currently only commits are signed with headers.  However, in the future,
-we'll also sign tags with headers as well.  Let's refactor out a
-function called parse_buffer_signed_by_header which does exactly that.
-In addition, since we'll want to sign things other than commits this
-way, let's call the function sign_with_header instead of do_sign_commit.
+Only commits can be signed with headers, and tags need the same signing.
+Factor the header parsing out of the commit code into
+`parse_buffer_signed_by_header()` so both can use it.
 ```
 
-Present-tense problem ("Currently only commits are signed with headers"),
-forward-looking justification (tags will need this too), and a discarded
-alternative named outright: the function is `sign_with_header`, not the narrower
-`do_sign_commit` that the immediate need would suggest.
+A refactor's justification is often the work it enables. One clause says so;
+the diff shows the rest.
 
 </example>
 
@@ -191,20 +180,16 @@ alternative named outright: the function is `sign_with_header`, not the narrower
 
 ### A short message is right for a simple change
 
-Adapted from a real Linux kernel commit:
-
 ```
 btrfs: print correct subvol num if active swapfile prevents deletion
 
-Fix the error message in btrfs_delete_subvolume() if we can't delete a
-subvolume because it has an active swapfile: we were printing the number
-of the parent rather than the target.
+When a subvolume can't be deleted because it has an active swapfile, the
+error message in `btrfs_delete_subvolume()` prints the number of the
+parent rather than the target. Print the target's.
 ```
 
-When the change is simple, a three-line body is the right length: it states the
-present-tense problem precisely and stops. Brevity is not a defect -- pad
-nothing. The kernel's heavy trailer stack is that project's convention, not a
-template to reproduce.
+When the change is simple, a two-sentence body is the right length: it states
+the problem precisely and stops. Pad nothing.
 
 </example>
 
