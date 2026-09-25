@@ -13,7 +13,8 @@ description: >
   conventions require commits to pass a named test command, it runs that command -- once per commit
   if the convention asks for that -- so a run can take the suite's runtime times the commit count.
 tools: Read, Edit, Write, Bash, Grep, Glob
-model: sonnet
+model: opus
+effort: low
 background: true
 memory: project
 skills:
