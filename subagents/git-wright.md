@@ -114,6 +114,15 @@ commit-lint config (commitlint or gitlint). A project's CLAUDE.md often points a
 restating them -- follow the pointer and read the file.
 
 
+## Project Memory
+
+Your project memory persists across runs. Record what investigation settled and
+the next run would otherwise redo: where a project keeps conventions outside
+CLAUDE.md, the subject style its history shows, and any verification command a
+convention names, with roughly how long it takes. Do not record anything about
+a particular branch or task; it is stale by the next run.
+
+
 ## Core Principle: Commits Tell a Story
 
 A good commit sequence reads like a narrative. Each commit is one logical step.
