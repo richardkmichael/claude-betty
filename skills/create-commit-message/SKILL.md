@@ -1,30 +1,33 @@
 ---
 name: create-commit-message
 description: >
-  Write a commit message for the currently staged changes, matching the
-  project's conventions. Use when staged changes need a well-formed message --
-  on its own, or by an agent after it stages a commit. Reads the staged diff;
-  does not stage or commit.
+  Draft a commit message matching the project's conventions, for staged changes
+  or for existing commits being reworded or squashed. Use whenever you are about
+  to write a commit message: before any `git commit`, and when rewording or
+  squashing commits. Does not stage or commit.
 ---
 
-# Commit Message for Staged Changes
+# Commit Message
 
-Produce one commit message describing the currently staged changes, and nothing
-else. Do not stage, unstage, or commit -- the caller has already decided what
-belongs in this commit. Your input is the staged diff; your output is the
-message.
+Draft one commit message. The input is a diff: the staged changes for a new
+commit, or the commits' own diff when rewording or squashing. The output is the
+message. Staging and committing are outside this skill: what goes into the
+commit has already been decided, and what happens to the message afterward is
+up to whatever invoked the skill.
 
-## 1. Read what is staged
+## 1. Read the change
 
 ```bash
-git diff --cached          # the exact changes this message must describe
-git diff --cached --stat   # files and scale, at a glance
+git diff --cached            # a new commit: the staged changes
+git diff --cached --stat     # files and scale, at a glance
+git show <sha>               # rewording: the commit's own diff
+git diff <first>^ <last>     # squashing: the combined diff of the range
 ```
 
-The message must account for everything in the staged diff and nothing that
-isn't there. If the staged changes are plainly two unrelated concerns, say so
-rather than writing a message that papers over the mix -- that's a sign the
-caller should split the commit, not that the message should stretch to cover it.
+The message must account for everything in the diff and nothing that isn't
+there. If the change is plainly two unrelated concerns, say so rather than
+writing a message that papers over the mix. That is a sign the commit should be
+split, not that the message should stretch to cover it.
 
 ## 2. Match the project's convention
 
@@ -94,8 +97,9 @@ inconsistent to infer from -- default to:
 
 ## Output
 
-Present the finished message. Do not run `git commit` -- the caller decides
-what to do with it.
+Return the finished message. Include the trailers the project's convention
+calls for. The invoking agent may append trailers of its own, so don't add
+trailers the convention doesn't call for.
 
 ## Examples
 
