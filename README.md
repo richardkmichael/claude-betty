@@ -14,8 +14,6 @@ component is self-contained and installed independently.
 
 - `create-commit-message` — write a commit message for the staged changes, matching the project's
   conventions.
-- `git-interactive` — reshape git history: interactive rebase, split, squash, reorder, amend,
-  `add -p`. Uses the `tmux` skill for the terminal session.
 - `handle-ci-failure` — diagnose a failed GitHub Actions run, match it to a known failure pattern,
   fix it, verify, then commit and push. Reads a per-project `.github/HANDLE_CI_FAILURE.md` for the
   branch, check command, push policy, and project-specific patterns.
@@ -80,8 +78,8 @@ ln -s "$PWD/output-styles/plain.md" ~/.claude/output-styles/plain.md
 
 Select an installed output style with `/output-style`.
 
-Two skills need another component installed first: `tool-usage` reads the database the
-`tool-monitor` hook writes, and `git-interactive` drives its terminal through the `tmux` skill.
+One skill needs another component installed first: `tool-usage` reads the database the
+`tool-monitor` hook writes.
 
 ### tool-monitor hook
 

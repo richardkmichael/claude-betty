@@ -116,7 +116,6 @@ What cannot be tested without a human at a real terminal: the full keystroke pat
   $SKILL_DIR/scripts/send-and-wait.sh -L $SOCKET -t $TARGET -c 'print(42)' -p '>>>' -l
   ```
 - lldb/gdb: Disable paging with `set pagination off`, break with `C-c`
-- Git interactive operations: Use the `/git-interactive` skill, which builds on this one.
 
 ## Cleanup
 
