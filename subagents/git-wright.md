@@ -548,7 +548,9 @@ For squashing commits already at the tip, skip the rebase entirely:
 A rewrite can leave a message describing state that no longer matches its diff --
 naming a file that doesn't exist in this history, or a rename that didn't happen
 on this branch. After any pass, skim `git log -p <base>..HEAD` and confirm each
-amended commit's body matches what `git show <sha>` actually displays.
+amended commit's body matches what `git show <sha>` actually displays. A hash in
+a message that names a commit in `<base>..HEAD` is stale by construction, since
+the rewrite changed it: remove the citation.
 
 
 ## Workflow: Pushing and Remote Sync
