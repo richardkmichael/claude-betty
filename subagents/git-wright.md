@@ -310,6 +310,12 @@ the identical result and are exactly what the workflows below rely on:
 Never use tmux, a blocking editor, or `git add -p` / `git add -i`. They need a
 terminal you don't have, and the seams above do the same job directly.
 
+Keep scratch files (todos, messages, patches, scripts) in a directory of your
+own: run `mktemp -d` once at the start of the task. Fixed names under `/tmp`
+collide when two runs overlap, and you run in the background. The examples
+below write that directory as `$D`. Shell variables don't persist between Bash
+calls, so start each command with `D=<the path>;` or write the path out.
+
 
 ## When You Are Uncertain
 
@@ -379,11 +385,11 @@ whole file. Build a patch of exactly the hunks for the current commit and apply
 it to the index:
 
 ```bash
-git diff -- <file> > /tmp/file.patch       # the file's unstaged changes
+git diff -- <file> > $D/file.patch         # the file's unstaged changes
 # keep only the hunks for this commit (slice whole hunks at @@ boundaries; for
 # sub-hunk precision, edit the +/- lines and add --recount so git recomputes the
 # line counts)
-git apply --cached /tmp/this-commit.patch
+git apply --cached $D/this-commit.patch
 ```
 
 `git apply --cached` places the chosen hunks into the index and leaves the rest
@@ -464,27 +470,27 @@ tools, feed it back: two `git rebase -i` invocations with your edits in between.
 
 ```bash
 # 1. capture git's real todo, then abort (nothing is applied)
-printf '#!/bin/sh\ncp "$1" /tmp/todo\nexit 1\n' > /tmp/seq.sh && chmod +x /tmp/seq.sh
-GIT_SEQUENCE_EDITOR=/tmp/seq.sh git rebase -i <base>   # reports an aborted rebase; expected
-# 2. Read /tmp/todo and edit it -- change verbs, reorder lines, add `break` --
+printf '#!/bin/sh\ncp "$1" %s/todo\nexit 1\n' "$D" > $D/seq.sh && chmod +x $D/seq.sh
+GIT_SEQUENCE_EDITOR=$D/seq.sh git rebase -i <base>   # reports an aborted rebase; expected
+# 2. Read $D/todo and edit it -- change verbs, reorder lines, add `break` --
 #    with the Edit tool, on git's own bytes (full structure intact).
 # 3. replay the edited todo
-GIT_SEQUENCE_EDITOR="cp /tmp/todo" GIT_EDITOR=false git rebase -i <base>
+GIT_SEQUENCE_EDITOR="cp $D/todo" GIT_EDITOR=false git rebase -i <base>
 ```
 
-`cp /tmp/todo` takes no `$1`: git appends the todo path, so it runs
-`cp /tmp/todo <path>`, overwriting git's todo with your edited one. The capture
+`cp $D/todo` takes no `$1`: git appends the todo path, so it runs
+`cp $D/todo <path>`, overwriting git's todo with your edited one. The capture
 script's `exit 1` aborts the first rebase -- git prints an editor-failed error,
-expected; `/tmp/todo` already holds the bytes.
+expected; `$D/todo` already holds the bytes.
 
 A single verb flip can skip the round trip: edit git's todo in place in one
 invocation, keying on the SHA and rewriting only the leading verb.
 
 ```bash
 H=$(git rev-parse --short <sha>)   # the abbreviation git writes in its todo
-printf '#!/bin/sh\nperl -i -pe '\''s/^pick/edit/ if /^pick %s[0-9a-f]*\\b/'\'' "$1"\n' "$H" > /tmp/seq.sh
-chmod +x /tmp/seq.sh
-GIT_SEQUENCE_EDITOR=/tmp/seq.sh GIT_EDITOR=false git rebase -i <base>
+printf '#!/bin/sh\nperl -i -pe '\''s/^pick/edit/ if /^pick %s[0-9a-f]*\\b/'\'' "$1"\n' "$H" > $D/seq.sh
+chmod +x $D/seq.sh
+GIT_SEQUENCE_EDITOR=$D/seq.sh GIT_EDITOR=false git rebase -i <base>
 ```
 
 The `[0-9a-f]*` tolerates a longer abbreviation; only the verb changes, so the
@@ -494,7 +500,7 @@ The rebase runs until it needs you, then returns to the shell; read its output
 and `git status` to see where it stopped. Four kinds of stop:
 
 Reword or squash message. When you know the final message ahead of time, skip the
-stop with `GIT_EDITOR="cp /tmp/msg"`: git runs `cp /tmp/msg` over its message file
+stop with `GIT_EDITOR="cp $D/msg"`: git runs `cp $D/msg` over its message file
 in the callback and commits with it, no stop. End the message with the
 `Curated-by: git-wright` trailer.
 
@@ -507,7 +513,7 @@ squash differ in where git has stopped:
   it.
 - Reword: git has already remade the commit with its original message and stops
   asking you to amend. Rewriting `.git/rebase-merge/message` is too late; instead
-  `git commit --amend -F /tmp/msg` (trailer included), then `git rebase --continue`.
+  `git commit --amend -F $D/msg` (trailer included), then `git rebase --continue`.
 
 One message per stop; a second reword/squash group in the same pass needs its own
 pass, which is why passes stay focused.
@@ -516,10 +522,10 @@ pass, which is why passes stay focused.
 
 ```bash
 git reset HEAD~                        # un-commit; changes now unstaged
-git apply --cached /tmp/piece-1.patch  # stage the first logical piece
-git commit -F /tmp/msg-1 --trailer "Curated-by: git-wright"
-git apply --cached /tmp/piece-2.patch  # ...and the next
-git commit -F /tmp/msg-2 --trailer "Curated-by: git-wright"
+git apply --cached $D/piece-1.patch  # stage the first logical piece
+git commit -F $D/msg-1 --trailer "Curated-by: git-wright"
+git apply --cached $D/piece-2.patch  # ...and the next
+git commit -F $D/msg-2 --trailer "Curated-by: git-wright"
 git rebase --continue
 ```
 
@@ -530,7 +536,7 @@ Verifying Commits by Running -- report and stop; never `--skip`.
 
 For squashing commits already at the tip, skip the rebase entirely:
 `git reset --soft <base>` then
-`git commit -F /tmp/message --trailer "Curated-by: git-wright"`.
+`git commit -F $D/message --trailer "Curated-by: git-wright"`.
 
 ### Verify after rewriting
 
