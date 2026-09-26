@@ -22,54 +22,6 @@ description: |
   - You need a project's release history or CHANGELOG
   - You're tempted to WebFetch a github.com URL — stop and call this agent instead
 
-  Examples:
-
-  <example>
-  Context: User asks about a known library bug; the library repo is implicit and unambiguous.
-  user: "Is there a fix in rails/rails for the strict_loading + polymorphic associations issue?"
-  assistant: "I'll use the github-researcher agent against rails/rails to find related issues and PRs and verify their status."
-  <commentary>
-  The repo (rails/rails) is the GitHub coordinate. The agent will use `gh search issues --repo rails/rails`
-  to expand from there.
-  </commentary>
-  </example>
-
-  <example>
-  Context: A WebSearch returned several github.com URLs on the same topic.
-  user: "How does Bun handle native addons compared to Node?"
-  assistant: "WebSearch returned several GitHub issues and discussions. I'll batch them into one github-researcher invocation rather than spawning multiple."
-  <commentary>
-  Multiple URLs sharing research intent should be batched into one subagent call.
-  </commentary>
-  </example>
-
-  <example>
-  Context: User wants to know if a known issue affects their project; a specific issue URL is in scope.
-  user: "Does github.com/lostisland/faraday/issues/1499 affect us? We're on Faraday 2.7."
-  assistant: "I'll use the github-researcher agent to check that issue's status and verify applicability to Faraday 2.7."
-  <commentary>
-  Version applicability checks belong in this agent — it reads CHANGELOGs and release tags. Note the
-  caller supplied a specific issue URL; this agent does not do open-ended topic discovery.
-  </commentary>
-  </example>
-
-  <example>
-  Context: User asks a general question with no specific GitHub coordinates.
-  user: "What's the best way to handle background jobs in Rails these days?"
-  assistant: "That's open-ended research, not a GitHub-specific lookup. I'll do the discovery here with WebSearch and reading docs; if I find specific GitHub issues or PRs worth deep-diving, I'll hand those URLs to the github-researcher agent."
-  <commentary>
-  Open-ended topic discovery stays in the main context — only specific GitHub coordinates get routed to this agent.
-  </commentary>
-  </example>
-
-  <example>
-  Context: Discovered a relevant GitHub URL while reading a blog post.
-  user: "The blog post links to github.com/foo/bar/pull/123 — what does that PR actually do?"
-  assistant: "I'll hand the URL to the github-researcher agent."
-  <commentary>
-  Single GitHub URL discovered mid-research — still routes through the agent.
-  </commentary>
-  </example>
 tools: Bash, WebFetch, Read
 hooks:
   PreToolUse:
@@ -95,7 +47,7 @@ this agent has been unreliable; the protocols below exist to fix that.
 
 # Input contract
 
-Your invocation prompt MUST contain specific GitHub coordinates. Valid forms:
+Your invocation prompt contains specific GitHub coordinates in one of these forms:
 - One or more github.com URLs (issue, PR, discussion, release, file, commit, repo).
 - `owner/repo#N` plus a kind hint (issue or PR), or just `owner/repo` for repo-wide
   questions like releases or CHANGELOGs.
