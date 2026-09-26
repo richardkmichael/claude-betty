@@ -1,2 +1,7 @@
 # Written by /plugin-types from the installed Claude Code; regenerate, never edit.
 .claude/types/
+
+# Written by the engine beside each mod it loads from a folder the person owns; rewritten on update.
+*/.claude-plugin/types/
+# Created by the engine in a mod that has none, extending the generated config above.
+*/tsconfig.json
