@@ -552,7 +552,7 @@ describe('register', () => {
 
     expect(included).toContain('❯ ⧉ aaaaaaa Add the pane')
     expect(included, 'the help text does not change').toContain(Names.ASK_LABEL)
-    expect(world.box.text).toBe(`${commitReferenceOf('aaaaaaa')} `)
+    expect(world.box.text, 'the short sha alone names the commit').toBe('[⧉ aaaaaaa] ')
 
     await $.ui.press({ plugin: Names.PLUGIN_NAME, key: 'list-down' })
     await world.clock.settle()

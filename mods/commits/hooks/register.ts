@@ -124,7 +124,7 @@ const TOOL_INPUT_SCHEMA = {
  * @returns the commit reference
  */
 export function commitReferenceOf(short: string): string {
-  return commitReferenceTextOf(`commit ${short}`)
+  return commitReferenceTextOf(short)
 }
 
 /**
