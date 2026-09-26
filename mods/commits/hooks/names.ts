@@ -35,7 +35,7 @@ export const PANEL_HIDDEN_TEXT = 'Commits panel hidden'
 export const MAIN_LOOP_ONLY_TEXT =
   'The commits pane opens for the main conversation only, not from a subagent'
 
-/** The key that arms or disarms the selected commit while the pane has the keys. */
+/** The key that includes or excludes the selected commit while the pane has the keys. */
 export const ASK_HOTKEY = 'a'
 
 /** The key help centred in the header. */
@@ -52,7 +52,7 @@ export const LIST_DOWN_ACTION = 'app:diffFileListDown'
 
 /**
  * The ask button's label, static help text; the engine draws the hotkey and
- * a colon before it. An armed commit shows only by its gutter mark.
+ * a colon before it. An included commit shows only by its gutter mark.
  */
 export const ASK_LABEL = 'ask about commit'
 

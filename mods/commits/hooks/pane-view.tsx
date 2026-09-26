@@ -36,7 +36,7 @@ export type DiffState =
 
 /**
  * What the pane draws: the listing, the model's notes by full sha, each
- * loaded patch by sha, the selected commit, what is armed to ride the next
+ * loaded patch by sha, the selected commit, what is included to ride the next
  * prompt, and the content window's first row over the room the pane last
  * had.
  */
@@ -46,15 +46,15 @@ export type PaneModel = {
   notes: Readonly<Record<string, string>>
   diffs: Readonly<Record<string, DiffState>>
   selectedSha: string | null
-  /** Each armed thing: a whole commit, or with `range` some of its lines. */
-  armed: readonly ArmedMark[]
+  /** Each included thing: a whole commit, or with `range` some of its lines. */
+  included: readonly IncludedMark[]
   top: number
   bodyRows: number
   bodyColumns: number
 }
 
-/** An armed commit by sha, whole without a range, some of its lines with one. */
-export type ArmedMark = {
+/** An included commit by sha, whole without a range, some of its lines with one. */
+export type IncludedMark = {
   sha: string
   range?: LineRange
 }
@@ -108,17 +108,17 @@ export type LineKind =
 /** The selected row's mark, in the gutter's first column. */
 export const POINTER = '❯'
 
-/** An armed row's mark, in the gutter's third column. */
-export const ARMED_MARK = '⧉'
+/** An included row's mark, in the gutter's third column. */
+export const INCLUDED_MARK = '⧉'
 
-/** The mark's colour when the whole commit is armed. */
-export const WHOLE_ARMED_COLOR = 'green'
+/** The mark's colour when the whole commit is included. */
+export const WHOLE_INCLUDED_COLOR = 'green'
 
-/** The mark's colour when only some of the commit's lines are armed. */
-export const LINES_ARMED_COLOR = 'yellow'
+/** The mark's colour when only some of the commit's lines are included. */
+export const LINES_INCLUDED_COLOR = 'yellow'
 
-/** The gutter before a commit row: pointer, space, armed mark, space. */
-const GUTTER = `${POINTER} ${ARMED_MARK} `
+/** The gutter before a commit row: pointer, space, included mark, space. */
+const GUTTER = `${POINTER} ${INCLUDED_MARK} `
 
 /**
  * Rows drawn past the window's end, blank where the content runs out, so the
@@ -136,7 +136,7 @@ export const EMPTY_MODEL: PaneModel = {
   notes: {},
   diffs: {},
   selectedSha: null,
-  armed: [],
+  included: [],
   top: 0,
   bodyRows: 0,
   bodyColumns: 80,
@@ -358,7 +358,7 @@ export function windowOf(model: PaneModel): ContentWindow {
 
 /**
  * The diff region's props: the window of content lines it draws, where the
- * window starts, and the armed ranges of the selected commit. What the pane
+ * window starts, and the included ranges of the selected commit. What the pane
  * draws it with, and what the `ui.message` hook hands it after a post.
  *
  * @param model what the pane draws
@@ -379,7 +379,7 @@ export function clientPropsOf(
       ...(line.bold ? { bold: true } : {}),
       ...(line.dim ? { dim: true } : {}),
     })),
-    armed: model.armed.flatMap(mark =>
+    included: model.included.flatMap(mark =>
       mark.sha === model.selectedSha && mark.range !== undefined ? [{ ...mark.range }] : [],
     ),
   }
@@ -510,9 +510,9 @@ function commitRow(
 ): RenderElement {
   const { Box, Text, Button } = ui
   const isSelected = commit.sha === model.selectedSha
-  const marks = model.armed.filter(mark => mark.sha === commit.sha)
-  const isWholeArmed = marks.some(mark => mark.range === undefined)
-  const isPartlyArmed = marks.length > 0
+  const marks = model.included.filter(mark => mark.sha === commit.sha)
+  const isWholeIncluded = marks.some(mark => mark.range === undefined)
+  const isPartlyIncluded = marks.length > 0
   const note = model.notes[commit.sha]
   const room = Math.max(8, model.bodyColumns - GUTTER.length - 1)
   const label = truncated(`${commit.short} ${sanitize(commit.subject)}`, room)
@@ -521,8 +521,8 @@ function commitRow(
     <Box flexDirection="row">
       <Text>{isSelected ? POINTER : ' '}</Text>
       <Text> </Text>
-      <Text color={isWholeArmed ? WHOLE_ARMED_COLOR : LINES_ARMED_COLOR}>
-        {isWholeArmed || isPartlyArmed ? ARMED_MARK : ' '}
+      <Text color={isWholeIncluded ? WHOLE_INCLUDED_COLOR : LINES_INCLUDED_COLOR}>
+        {isWholeIncluded || isPartlyIncluded ? INCLUDED_MARK : ' '}
       </Text>
       <Text> </Text>
       <Button

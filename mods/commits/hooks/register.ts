@@ -54,21 +54,21 @@ type Host = {
 }
 
 /**
- * One thing armed to ride the next prompt: a whole commit, or a range of
- * lines of one; its token for the prompt box, its block for the model, and
- * whether the token is in the box.
+ * One thing included to ride the next prompt: a whole commit, or a range of
+ * lines of one; its commit reference for the prompt box, its block for the
+ * model, and whether the commit reference is in the box.
  */
-type Armed = {
+type Included = {
   key: string
   sha: string
   short: string
-  token: string
+  commitReference: string
   text: string
   isWritten: boolean
 } & ({ kind: 'commit' } | { kind: 'lines'; range: LineRange })
 
-/** An armed range of lines. */
-type ArmedLines = Armed & { kind: 'lines' }
+/** An included range of lines. */
+type IncludedLines = Included & { kind: 'lines' }
 
 /** The model's `show` input once checked: what to list, and its notes by sha. */
 type ShowInput = {
@@ -78,8 +78,8 @@ type ShowInput = {
 
 const NOTE_MAX_CHARS = 300
 
-/** What the prompt reads when only tokens were typed. */
-const TOKENS_ONLY_TEXT = 'See the attached commit.'
+/** What the prompt reads when only commit references were typed. */
+const COMMIT_REFERENCES_ONLY_TEXT = 'See the attached commit.'
 
 /** Rows one wheel tick moves the content; an arrow moves one. */
 const WHEEL_ROWS = 3
@@ -116,35 +116,36 @@ const TOOL_INPUT_SCHEMA = {
 }
 
 /**
- * The token the prompt box carries for an armed commit; the person sees it
- * where the engine's own attachments show, and deleting it disarms.
+ * The commit reference the prompt box carries for an included commit; the
+ * person sees it where the engine's own attachments show, and deleting it
+ * excludes.
  *
  * @param short the commit's abbreviated sha
- * @returns the token
+ * @returns the commit reference
  */
-export function tokenOf(short: string): string {
-  return tokenTextOf(`commit ${short}`)
+export function commitReferenceOf(short: string): string {
+  return commitReferenceTextOf(`commit ${short}`)
 }
 
 /**
- * The token for a range of a commit's content lines: the commit, a colon,
- * and the range, which keeps several ranges of one commit apart.
+ * The commit reference for a range of a commit's content lines: the commit, a
+ * colon, and the range, which keeps several ranges of one commit apart.
  *
  * @param short the commit's abbreviated sha
  * @param range the content lines, inclusive
- * @returns the token
+ * @returns the commit reference
  */
-export function linesTokenOf(short: string, range: LineRange): string {
-  return tokenTextOf(`${short}:${range.from}-${range.to}`)
+export function linesCommitReferenceOf(short: string, range: LineRange): string {
+  return commitReferenceTextOf(`${short}:${range.from}-${range.to}`)
 }
 
-/** The shape every token of this plugin's takes: the mark, then what it names. */
-function tokenTextOf(inner: string): string {
+/** The shape of every commit reference: the mark, then what it names. */
+function commitReferenceTextOf(inner: string): string {
   return `[⧉ ${inner}]`
 }
 
-/** Any token of this plugin's in the prompt's text, with the space after it. */
-const TOKEN_PATTERN = /\[⧉ [^\]\n]*\] ?/g
+/** Any of this plugin's commit references in the text, with the space after it. */
+const COMMIT_REFERENCE_PATTERN = /\[⧉ [^\]\n]*\] ?/g
 
 /**
  * Registers the commits pane: `/commits` and the model's `show` tool open
@@ -160,27 +161,29 @@ export function register(on: On) {
   let host: Host | null = null
   let cwd = ''
   let isOpen = false
+
   let model: PaneModel = EMPTY_MODEL
 
   const loads = new Map<string, Promise<void>>()
 
   /**
-   * The commits armed to ride the next prompt, by full sha, in arming order.
-   * Outlives the pane: closing it keeps them, sending the prompt or a new
-   * session clears them. `isWritten` says the token is in the prompt box.
+   * The commits included to ride the next prompt, by full sha, in the order
+   * they were included. Outlives the pane: closing it keeps them, sending the
+   * prompt or a new session clears them. `isWritten` says the commit reference
+   * is in the prompt box.
    */
-  const armed = new Map<string, Armed>()
+  const included = new Map<string, Included>()
 
-  /** The armed ranges of a commit's lines. */
-  function linesArmedOf(sha: string | null): ArmedLines[] {
-    return [...armed.values()].filter(
-      (entry): entry is ArmedLines => entry.kind === 'lines' && entry.sha === sha,
+  /** The included ranges of a commit's lines. */
+  function linesIncludedOf(sha: string | null): IncludedLines[] {
+    return [...included.values()].filter(
+      (entry): entry is IncludedLines => entry.kind === 'lines' && entry.sha === sha,
     )
   }
 
-  /** Brings the model's armed marks in step with `armed`. */
-  function syncArmed() {
-    model = { ...model, armed: [...armed.values()] }
+  /** Brings the model's included marks in step with `included`. */
+  function syncIncluded() {
+    model = { ...model, included: [...included.values()] }
   }
 
   function reset() {
@@ -189,7 +192,7 @@ export function register(on: On) {
   }
 
   async function forget(engine: Host | null) {
-    armed.clear()
+    included.clear()
     reset()
 
     if (engine) {
@@ -224,7 +227,7 @@ export function register(on: On) {
       commits,
       notes: notesFor(commits, notes),
       selectedSha,
-      armed: [...armed.values()],
+      included: [...included.values()],
     }
 
     try {
@@ -341,10 +344,10 @@ export function register(on: On) {
       return
     }
 
-    const entry = armed.get(sha)
+    const entry = included.get(sha)
 
     if (entry) {
-      await disarm(engine, entry)
+      await exclude(engine, entry)
 
       return
     }
@@ -358,29 +361,29 @@ export function register(on: On) {
     const state = model.diffs[sha]
     const files = state?.kind === 'loaded' ? state.files : []
 
-    for (const entry of linesArmedOf(sha)) {
-      armed.delete(entry.key)
+    for (const entry of linesIncludedOf(sha)) {
+      included.delete(entry.key)
     }
 
-    armed.set(sha, {
+    included.set(sha, {
       key: sha,
       kind: 'commit',
       sha,
       short: commit.short,
-      token: tokenOf(commit.short),
+      commitReference: commitReferenceOf(commit.short),
       text: askTextOf(commit, files),
       isWritten: false,
     })
-    syncArmed()
+    syncIncluded()
     engine.invalidate()
     await syncBox(engine).catch(() => undefined)
   }
 
   /**
-   * Arms a range of the selected commit's content lines, as a drag over
-   * the diff region posted it, and writes its token.
+   * Includes a range of the selected commit's content lines, as a drag over
+   * the diff region posted it, and writes its commit reference.
    */
-  async function armLines(engine: Host, from: number, to: number) {
+  async function includeLines(engine: Host, from: number, to: number) {
     const commit = model.commits.find(candidate => candidate.sha === model.selectedSha)
 
     if (!commit) {
@@ -397,39 +400,39 @@ export function register(on: On) {
     const range: LineRange = { from: start, to: start + chosen.length - 1 }
     const key = `${commit.sha}:${range.from}-${range.to}`
 
-    if (armed.has(key)) {
+    if (included.has(key)) {
       return
     }
 
-    armed.set(key, {
+    included.set(key, {
       key,
       kind: 'lines',
       sha: commit.sha,
       short: commit.short,
-      token: linesTokenOf(commit.short, range),
+      commitReference: linesCommitReferenceOf(commit.short, range),
       text: linesTextOf(commit, chosen),
       isWritten: false,
       range,
     })
-    syncArmed()
+    syncIncluded()
     engine.invalidate()
     await syncBox(engine).catch(() => undefined)
   }
 
-  /** Disarms the armed range of the selected commit that holds a content line. */
-  async function disarmLinesAt(engine: Host, at: number) {
-    const entry = linesArmedOf(model.selectedSha).find(
+  /** Excludes the included range of the selected commit that holds a content line. */
+  async function excludeLinesAt(engine: Host, at: number) {
+    const entry = linesIncludedOf(model.selectedSha).find(
       candidate => at >= candidate.range.from && at <= candidate.range.to,
     )
 
     if (entry) {
-      await disarm(engine, entry)
+      await exclude(engine, entry)
     }
   }
 
-  async function disarm(engine: Host, entry: Armed) {
-    armed.delete(entry.key)
-    syncArmed()
+  async function exclude(engine: Host, entry: Included) {
+    included.delete(entry.key)
+    syncIncluded()
     engine.invalidate()
     await syncBox(engine).catch(() => undefined)
   }
@@ -454,13 +457,14 @@ export function register(on: On) {
   let syncing: Promise<void> = Promise.resolve()
 
   /**
-   * Brings the prompt box in step with `armed`, in one read and at most one
-   * write: an entry whose written token the person deleted is dropped, the
-   * tokens of entries no longer armed leave the box, and the tokens not yet
-   * in it are appended. On arming and disarming, at a redraw or a close for
-   * a token a refused fill left behind, and at a fresh load for tokens of a
-   * module state that is gone. Syncs run one after another, so a redraw
-   * during an arming's own sync cannot append the same token twice.
+   * Brings the prompt box in step with `included`, in one read and at most one
+   * write: an entry whose written commit reference the person deleted is
+   * dropped, the commit references of entries no longer included leave the box,
+   * and the commit references not yet in it are appended. On including and
+   * excluding, at a redraw or a close for a commit reference a refused fill
+   * left behind, and at a fresh load for commit references of a module state
+   * that is gone. Syncs run one after another, so a redraw during an
+   * inclusion's own sync cannot append the same commit reference twice.
    */
   function syncBox(engine: Host): Promise<void> {
     const run = syncing.then(() => syncBoxNow(engine))
@@ -473,19 +477,19 @@ export function register(on: On) {
   async function syncBoxNow(engine: Host) {
     const box = await engine.promptRead()
 
-    reconcileArmed(engine, box.text)
+    reconcileIncluded(engine, box.text)
 
-    const tokens = new Set([...armed.values()].map(entry => entry.token))
-    const kept = box.text.replace(TOKEN_PATTERN, match =>
-      tokens.has(match.trimEnd()) ? match : '',
+    const commitReferences = new Set([...included.values()].map(entry => entry.commitReference))
+    const kept = box.text.replace(COMMIT_REFERENCE_PATTERN, match =>
+      commitReferences.has(match.trimEnd()) ? match : '',
     )
-    const pending = [...armed.values()].filter(entry => !entry.isWritten)
+    const pending = [...included.values()].filter(entry => !entry.isWritten)
 
     if (kept === box.text && pending.length === 0) {
       return
     }
 
-    const appended = pending.map(entry => `${entry.token} `).join('')
+    const appended = pending.map(entry => `${entry.commitReference} `).join('')
     const lead = appended === '' || kept === '' || /\s$/.test(kept) ? '' : ' '
 
     const { isFilled } = await engine.promptFill(
@@ -502,27 +506,27 @@ export function register(on: On) {
   }
 
   /**
-   * Drops the armed commits whose written token is no longer in the prompt's
-   * text, so the gutter agrees with the box: on each edit the person makes,
-   * and at each sync as a backstop.
+   * Drops the included commits whose written commit reference is no longer in
+   * the prompt's text, so the gutter agrees with the box: on each edit the
+   * person makes, and at each sync as a backstop.
    */
-  function reconcileArmed(engine: Host, text: string) {
-    const gone = [...armed.values()].filter(
-      entry => entry.isWritten && !text.includes(entry.token),
+  function reconcileIncluded(engine: Host, text: string) {
+    const gone = [...included.values()].filter(
+      entry => entry.isWritten && !text.includes(entry.commitReference),
     )
 
     if (gone.length > 0) {
       for (const entry of gone) {
-        armed.delete(entry.key)
+        included.delete(entry.key)
       }
 
-      syncArmed()
+      syncIncluded()
       engine.invalidate()
     }
   }
 
   function hasWritten(): boolean {
-    return [...armed.values()].some(entry => entry.isWritten)
+    return [...included.values()].some(entry => entry.isWritten)
   }
 
   async function closePane(engine: Host) {
@@ -585,7 +589,7 @@ export function register(on: On) {
   /**
    * On a load after a reload or a worker respawn the module's state is
    * fresh while the engine may still show the pane and the prompt may still
-   * hold tokens: closes the one and strips the others.
+   * hold commit references: closes the one and strips the others.
    */
   async function clearStale(engine: Host) {
     const panes = await engine.panes()
@@ -785,10 +789,10 @@ export function register(on: On) {
         }
         break
       case 'click':
-        await disarmLinesAt(engine, post.at)
+        await excludeLinesAt(engine, post.at)
         break
       case 'select':
-        await armLines(engine, post.from, post.to)
+        await includeLines(engine, post.from, post.to)
         break
     }
 
@@ -806,8 +810,8 @@ export function register(on: On) {
     const Client = 'Client' in table ? table.Client : undefined
 
     // While the composer holds the keys the person may have edited the box,
-    // and a token a refused fill left behind can be written now.
-    if (!e.props.isFocused && armed.size > 0) {
+    // and a commit reference a refused fill left behind can be written now.
+    if (!e.props.isFocused && included.size > 0) {
       await syncBox(engine).catch(() => undefined)
     }
 
@@ -831,7 +835,7 @@ export function register(on: On) {
       isOpen = false
       reset()
 
-      if (host && armed.size > 0) {
+      if (host && included.size > 0) {
         await syncBox(host).catch(() => undefined)
       }
     }
@@ -855,7 +859,7 @@ export function register(on: On) {
     const box = await next(e)
 
     if (host && hasWritten()) {
-      reconcileArmed(host, box.text)
+      reconcileIncluded(host, box.text)
     }
 
     return box
@@ -864,19 +868,19 @@ export function register(on: On) {
   on('prompt.submit', async ($, e, next) => {
     const engine = host
 
-    if (!engine || armed.size === 0) {
+    if (!engine || included.size === 0) {
       return next(e)
     }
 
     let text = e.text
     const blocks: string[] = []
 
-    for (const entry of armed.values()) {
-      const token = entry.token
-      const isKept = !entry.isWritten || text.includes(token)
+    for (const entry of included.values()) {
+      const commitReference = entry.commitReference
+      const isKept = !entry.isWritten || text.includes(commitReference)
 
       if (isKept) {
-        text = withoutToken(text, token)
+        text = withoutCommitReference(text, commitReference)
         blocks.push(entry.text)
       }
     }
@@ -886,13 +890,13 @@ export function register(on: On) {
         ? await next(e)
         : await next({
             ...e,
-            text: text.trim() === '' ? TOKENS_ONLY_TEXT : text,
+            text: text.trim() === '' ? COMMIT_REFERENCES_ONLY_TEXT : text,
             context: [...(e.context ?? []), ...blocks],
           })
 
     if (result.drop === undefined) {
-      armed.clear()
-      syncArmed()
+      included.clear()
+      syncIncluded()
       engine.invalidate()
     }
 
@@ -951,14 +955,14 @@ function postOf(data: unknown): DiffClientPost | null {
 }
 
 /**
- * The text with every copy of a token and the space after it removed.
+ * The text with every copy of a commit reference and the space after it removed.
  *
  * @param text the prompt's text
- * @param token the token
+ * @param commitReference the commit reference
  * @returns the text without it
  */
-export function withoutToken(text: string, token: string): string {
-  return text.split(`${token} `).join('').split(token).join('')
+export function withoutCommitReference(text: string, commitReference: string): string {
+  return text.split(`${commitReference} `).join('').split(commitReference).join('')
 }
 
 /**
@@ -1053,8 +1057,8 @@ function orientationOf(label: string, count: number): string {
     `The commits pane is open beside the transcript, listing ` +
     `${Names.countOf(count)} (${label}). The user can select a commit and press ` +
     `${Names.ASK_HOTKEY} to attach its message and diff to their next prompt, ` +
-    `shown in their prompt as "${tokenOf('<sha>')}", or drag over lines of it ` +
-    `to attach those lines alone, shown as "${tokenTextOf('<sha>:<from>-<to>')}"; a whole ` +
+    `shown in their prompt as "${commitReferenceOf('<sha>')}", or drag over lines of it ` +
+    `to attach those lines alone, shown as "${commitReferenceTextOf('<sha>:<from>-<to>')}"; a whole ` +
     `commit's attachment begins "${Names.ATTACHED_LEAD}" and wraps a <commit> element, ` +
     `a lines attachment "${Names.ATTACHED_LEAD_LINES} lines of commit" and wraps ` +
     `<commit-lines>. Escape closes the pane while it has the ` +

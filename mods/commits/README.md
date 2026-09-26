@@ -42,43 +42,45 @@ row. `ctrl+x tab` gives a pane the keys later; `ctrl+x x` closes one.
 | `a`                  | attach the selected commit to the next prompt, or detach |
 | Esc                  | close the pane                                            |
 
-Pressing `a` arms the selected commit: the row gets a green `⧉` in the gutter and
-`[⧉ commit <sha>]` is appended to the prompt box at once. The engine gives
-the keyboard to a non-empty composer, so `ctrl+x tab` returns to the pane.
-Pressing `a` again on an armed commit disarms it and takes its token out.
-Closing the pane keeps the commits armed; reopening shows them marked. While
-a token is in the box a slash command cannot be typed, as with the engine's
-own pasted-text placeholders; clear the box or send first.
+Pressing `a` includes the selected commit: the row gets a green `⧉` in the
+gutter and `[⧉ commit <sha>]` is appended to the prompt box at once. The engine
+gives the keyboard to a non-empty composer, so `ctrl+x tab` returns to the
+pane. Pressing `a` again on an included commit excludes it and takes its
+commit reference out. Closing the pane keeps the commits included; reopening
+shows them marked. While a commit reference is in the box a slash command
+cannot be typed, as with the engine's own pasted-text placeholders; clear
+the box or send first.
 
 The selected commit's message and diff are drawn in a region of the pane's
 own (a `Client` element, terminal and desktop only). Dragging over lines
-there arms that range: the lines get `⧉` in the region's gutter, the
-commit's row gets a yellow `⧉` (green once the whole commit is armed, which
-also drops its ranges), and
-`[⧉ <sha>:<from>-<to>]` is appended to the prompt box. A click on
-an armed range disarms it; a click elsewhere only gives the region the
-keys. While the region holds them: ↑ ↓ `j` `k` PgUp PgDn scroll it, Tab,
-Shift+Tab and ctrl+↑/↓ move between commits, `a` arms or disarms the
-selected commit, and the keys stay in the region through all of it, unlike
-`a` pressed on the pane's own ring, after which the composer takes them.
-Other typed letters go nowhere; Escape hands the keys back to the composer.
+there includes that range: the lines get `⧉` in the region's gutter, the
+commit's row gets a yellow `⧉` (green once the whole commit is included,
+which also drops its ranges), and `[⧉ <sha>:<from>-<to>]` is appended to the
+prompt box. A click on an included range excludes it; a click elsewhere only
+gives the region the keys. While the region holds them: ↑ ↓ `j` `k` PgUp
+PgDn scroll it, Tab, Shift+Tab and ctrl+↑/↓ move between commits, `a`
+includes or excludes the selected commit, and the keys stay in the region
+through all of it, unlike `a` pressed on the pane's own ring, after which
+the composer takes them. Other typed letters go nowhere; Escape hands the
+keys back to the composer.
 
-When the prompt is sent, each armed commit rides along as hidden context
+When the prompt is sent, each included commit rides along as hidden context
 beginning `The user attached commit <sha>`: a `<commit>` element with the
 sha, author and date as attributes, holding `<commit-subject>`,
 `<commit-message>` and one `<commit-diff path="…">` per file with its hunks
 as `git show` prints them (a `note` attribute instead for a rename or a
-binary). Each armed range rides along beginning `The user attached lines of
-commit <sha>`: a `<commit-lines>` element holding one element per run of
+binary). Each included range rides along beginning `The user attached lines
+of commit <sha>`: a `<commit-lines>` element holding one element per run of
 lines, named for the part of the commit it is from. A `<commit-diff>` run
 carries `new-rev` and `new-lines`, the lines' numbers in the file at the
 commit worked out from the hunk header, and, when the run removes lines,
 `old-rev` and `old-lines` at the parent, so the model can read around them
 with `git show <rev>:<path>` instead of finding them in the diff again.
-Tokens are stripped from the text first. A written token deleted by
-hand is a detach, and the gutter clears on that edit. A prompt that
-held only tokens is sent as `See the attached commit.` `/clear` and
-`/resume` forget everything and take the tokens out.
+Commit references are stripped from the text first. A written commit
+reference deleted by hand is a detach, and the gutter clears on that edit. A
+prompt that held only commit references is sent as `See the attached
+commit.` `/clear` and `/resume` forget everything and take the commit
+references out.
 
 The ctrl+↑/↓ chords are the engine's diff-list actions, declared on two
 empty buttons; with the built-in diff pane open too, the engine gives the
@@ -100,7 +102,7 @@ chord to the pane drawn last.
   attached commit is cut at 60000.
 - Nothing is kept across `/clear`, `/resume` or a restart. A fresh load of
   the module (a reload, a worker respawn) closes a pane the engine still
-  shows and strips stale tokens from the box.
+  shows and strips stale commit references from the box.
 - The listing does not refresh when the model commits; `/commits` twice
   reloads it.
 

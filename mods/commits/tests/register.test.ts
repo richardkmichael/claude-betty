@@ -10,7 +10,7 @@ import { describe, expect, mock, test, tier } from 'claude-code/testing'
 import type { Engine, Mounted } from 'claude-code/testing'
 
 import * as Names from '../hooks/names'
-import { linesTokenOf, tokenOf } from '../hooks/register'
+import { linesCommitReferenceOf, commitReferenceOf } from '../hooks/register'
 
 tier('user')
 
@@ -281,11 +281,11 @@ describe('register', () => {
     expect(world.opened).toEqual([])
   })
 
-  test('a fresh load closes a pane the engine still shows and strips stale tokens', async ($, on) => {
+  test('a fresh load closes a pane the engine still shows and strips stale commit references', async ($, on) => {
     const world = worldOf(on)
 
     world.opened.push(Names.PANE_ID)
-    world.box.text = `Look: ${tokenOf('deadbee')} at this`
+    world.box.text = `Look: ${commitReferenceOf('deadbee')} at this`
 
     await $.session.start(SESSION)
 
@@ -541,18 +541,18 @@ describe('register', () => {
     expect(answer.deny).toContain('not a revision range')
   })
 
-  test('ask marks the commit and writes its token at once', async ($, on) => {
+  test('ask marks the commit and writes its commit reference at once', async ($, on) => {
     const world = await openedWorldOf($, on)
     await $.ui.render(FOCUSED_PANE)
 
     await $.ui.press({ plugin: Names.PLUGIN_NAME, key: 'ask' })
     await world.clock.settle()
 
-    const armed = textOf(await $.ui.render(FOCUSED_PANE))
+    const included = textOf(await $.ui.render(FOCUSED_PANE))
 
-    expect(armed).toContain('❯ ⧉ aaaaaaa Add the pane')
-    expect(armed, 'the help text does not change').toContain(Names.ASK_LABEL)
-    expect(world.box.text).toBe(`${tokenOf('aaaaaaa')} `)
+    expect(included).toContain('❯ ⧉ aaaaaaa Add the pane')
+    expect(included, 'the help text does not change').toContain(Names.ASK_LABEL)
+    expect(world.box.text).toBe(`${commitReferenceOf('aaaaaaa')} `)
 
     await $.ui.press({ plugin: Names.PLUGIN_NAME, key: 'list-down' })
     await world.clock.settle()
@@ -560,18 +560,18 @@ describe('register', () => {
     await $.ui.press({ plugin: Names.PLUGIN_NAME, key: 'ask' })
     await world.clock.settle()
 
-    expect(world.box.text).toBe(`${tokenOf('aaaaaaa')} ${tokenOf('bbbbbbb')} `)
+    expect(world.box.text).toBe(`${commitReferenceOf('aaaaaaa')} ${commitReferenceOf('bbbbbbb')} `)
     expect(textOf(await $.ui.render(FOCUSED_PANE))).toContain('  ⧉ aaaaaaa Add the pane')
     expect(textOf(await $.ui.render(FOCUSED_PANE))).toContain('❯ ⧉ bbbbbbb Start the plugin')
   })
 
-  test('the prompt rides an armed commit, once', async ($, on) => {
+  test('the prompt rides an included commit, once', async ($, on) => {
     const world = await openedWorldOf($, on)
     await $.ui.render(FOCUSED_PANE)
     await $.ui.press({ plugin: Names.PLUGIN_NAME, key: 'ask' })
     await world.clock.settle()
 
-    expect(world.box.text).toBe(`${tokenOf('aaaaaaa')} `)
+    expect(world.box.text).toBe(`${commitReferenceOf('aaaaaaa')} `)
 
     await $.prompt.submit({
       text: `${world.box.text}Is the split right?`,
@@ -600,7 +600,7 @@ describe('register', () => {
     expect(textOf(await $.ui.render(PANE))).toContain('❯   aaaaaaa Add the pane')
   })
 
-  test('ask again takes a written token back out', async ($, on) => {
+  test('ask again takes a written commit reference back out', async ($, on) => {
     const world = await openedWorldOf($, on)
     await $.ui.render(FOCUSED_PANE)
 
@@ -611,7 +611,7 @@ describe('register', () => {
     await world.clock.settle()
     await $.ui.render(PANE)
 
-    expect(world.box.text).toBe(`Look: ${tokenOf('aaaaaaa')} `)
+    expect(world.box.text).toBe(`Look: ${commitReferenceOf('aaaaaaa')} `)
 
     await $.ui.press({ plugin: Names.PLUGIN_NAME, key: 'ask' })
     await world.clock.settle()
@@ -620,14 +620,14 @@ describe('register', () => {
     expect(textOf(await $.ui.render(PANE))).toContain('❯   aaaaaaa Add the pane')
   })
 
-  test('a token deleted by hand disarms and attaches nothing', async ($, on) => {
+  test('a commit reference deleted by hand excludes and attaches nothing', async ($, on) => {
     const world = await openedWorldOf($, on)
     await $.ui.render(FOCUSED_PANE)
     await $.ui.press({ plugin: Names.PLUGIN_NAME, key: 'ask' })
     await world.clock.settle()
     await $.ui.render(PANE)
 
-    expect(world.box.text).toBe(`${tokenOf('aaaaaaa')} `)
+    expect(world.box.text).toBe(`${commitReferenceOf('aaaaaaa')} `)
 
     world.box.text = 'never mind'
     world.box.cursor = world.box.text.length
@@ -644,10 +644,10 @@ describe('register', () => {
       origin: { kind: 'composer' },
     })
 
-    expect(world.submitted[0]?.context, 'no token, no attachment').toBeUndefined()
+    expect(world.submitted[0]?.context, 'no commit reference, no attachment').toBeUndefined()
   })
 
-  test('two armed commits ride together, and only the tokens are stripped', async ($, on) => {
+  test('two included commits ride together, and only the commit references are stripped', async ($, on) => {
     const world = await openedWorldOf($, on)
     await $.ui.render(FOCUSED_PANE)
 
@@ -660,7 +660,7 @@ describe('register', () => {
     await world.clock.settle()
     await $.ui.render(PANE)
 
-    expect(world.box.text).toBe(`${tokenOf('aaaaaaa')} ${tokenOf('bbbbbbb')} `)
+    expect(world.box.text).toBe(`${commitReferenceOf('aaaaaaa')} ${commitReferenceOf('bbbbbbb')} `)
 
     await $.prompt.submit({
       text: world.box.text,
@@ -670,13 +670,13 @@ describe('register', () => {
 
     const [only] = world.submitted
 
-    expect(only?.text, 'tokens alone become a line the model can act on').not.toBe('')
+    expect(only?.text, 'commit references alone become a line the model can act on').not.toBe('')
     expect(only?.context).toHaveLength(2)
     expect(only?.context?.[0]).toContain(SHA_A)
     expect(only?.context?.[1]).toContain(SHA_B)
   })
 
-  test('closing the pane keeps the token and the commit armed', async ($, on) => {
+  test('closing the pane keeps the commit reference and the commit included', async ($, on) => {
     const world = await openedWorldOf($, on)
     await $.ui.render(FOCUSED_PANE)
     await $.ui.press({ plugin: Names.PLUGIN_NAME, key: 'ask' })
@@ -684,17 +684,17 @@ describe('register', () => {
 
     await $.command.run(COMMITS)
 
-    expect(world.box.text).toBe(`${tokenOf('aaaaaaa')} `)
+    expect(world.box.text).toBe(`${commitReferenceOf('aaaaaaa')} `)
 
     await $.command.run(COMMITS)
     await world.clock.settle()
 
-    expect(textOf(await $.ui.render(FOCUSED_PANE)), 'still armed on reopen').toContain(
+    expect(textOf(await $.ui.render(FOCUSED_PANE)), 'still included on reopen').toContain(
       '❯ ⧉ aaaaaaa Add the pane',
     )
   })
 
-  test('an armed commit whose fill was refused rides anyway', async ($, on) => {
+  test('an included commit whose fill was refused rides anyway', async ($, on) => {
     const world = await openedWorldOf($, on)
     await $.ui.render(FOCUSED_PANE)
 
@@ -704,7 +704,7 @@ describe('register', () => {
     await world.clock.settle()
 
     expect(world.box.text, 'the fill was refused').toBe('')
-    expect(textOf(await $.ui.render(FOCUSED_PANE)), 'armed all the same').toContain(
+    expect(textOf(await $.ui.render(FOCUSED_PANE)), 'included all the same').toContain(
       '❯ ⧉ aaaaaaa Add the pane',
     )
 
@@ -717,7 +717,7 @@ describe('register', () => {
     expect(world.submitted[0]?.context?.[0]).toContain(SHA_A)
   })
 
-  test('/clear forgets the armed commits and takes their tokens out', async ($, on) => {
+  test('/clear forgets the included commits and takes their commit references out', async ($, on) => {
     const world = worldOf(on)
 
     on('command.run', { command: 'clear' }, () => ({}))
@@ -730,14 +730,14 @@ describe('register', () => {
     await world.clock.settle()
     await $.ui.render(PANE)
 
-    expect(world.box.text).toBe(`${tokenOf('aaaaaaa')} `)
+    expect(world.box.text).toBe(`${commitReferenceOf('aaaaaaa')} `)
 
     await $.command.run({ ...COMMITS, command: 'clear' })
 
     expect(world.box.text).toBe('')
   })
 
-  test('a drag over diff lines arms them and writes their token', async ($, on) => {
+  test('a drag over diff lines includes them and writes their commit reference', async ($, on) => {
     const world = await openedWorldOf($, on)
 
     const ui = await mountedPaneOf($)
@@ -748,10 +748,10 @@ describe('register', () => {
     await dragOver(ui, 9, 10)
     await world.clock.settle()
 
-    const token = linesTokenOf('aaaaaaa', { from: 9, to: 10 })
+    const commitReference = linesCommitReferenceOf('aaaaaaa', { from: 9, to: 10 })
 
-    expect(world.box.text).toBe(`${token} `)
-    expect(await ui.find({ in: 'diff', text: /⧉/ }), 'the armed mark in the gutter').toBeDefined()
+    expect(world.box.text).toBe(`${commitReference} `)
+    expect(await ui.find({ in: 'diff', text: /⧉/ }), 'the included mark in the gutter').toBeDefined()
 
     const partly = JSON.stringify(await $.ui.render(PANE))
 
@@ -786,7 +786,7 @@ describe('register', () => {
     await ui.unmount()
   })
 
-  test('arming the whole commit drops its armed lines and turns the mark green', async ($, on) => {
+  test('including the whole commit drops its included lines and turns the mark green', async ($, on) => {
     const world = await openedWorldOf($, on)
 
     const ui = await mountedPaneOf($)
@@ -794,18 +794,18 @@ describe('register', () => {
     await dragOver(ui, 9, 10)
     await world.clock.settle()
 
-    expect(world.box.text).toBe(`${linesTokenOf('aaaaaaa', { from: 9, to: 10 })} `)
+    expect(world.box.text).toBe(`${linesCommitReferenceOf('aaaaaaa', { from: 9, to: 10 })} `)
 
     await $.ui.press({ plugin: Names.PLUGIN_NAME, key: 'ask' })
     await world.clock.settle()
 
     const whole = JSON.stringify(await $.ui.render(PANE))
 
-    expect(whole, 'green once the whole commit is armed').toContain(
+    expect(whole, 'green once the whole commit is included').toContain(
       '{"color":"green"},"children":["⧉"]',
     )
     expect(whole).not.toContain('{"color":"yellow"},"children":["⧉"]')
-    expect(world.box.text, "the ranges' tokens are gone").toBe(`${tokenOf('aaaaaaa')} `)
+    expect(world.box.text, "the ranges' commit references are gone").toBe(`${commitReferenceOf('aaaaaaa')} `)
 
     await ui.redraw()
 
@@ -817,7 +817,7 @@ describe('register', () => {
     await ui.unmount()
   })
 
-  test('a click focuses, a drag arms, a click on the armed range disarms', async ($, on) => {
+  test('a click focuses, a drag includes, a click on the included range excludes', async ($, on) => {
     const world = await openedWorldOf($, on)
 
     const ui = await mountedPaneOf($)
@@ -826,22 +826,22 @@ describe('register', () => {
     await ui.pointer({ type: 'up', x: 4, y: 9, button: 'left', in: 'diff' })
     await world.clock.settle()
 
-    expect(world.box.text, 'a plain click arms nothing').toBe('')
+    expect(world.box.text, 'a plain click includes nothing').toBe('')
 
     await ui.pointer({ type: 'down', x: 4, y: 9, button: 'left', in: 'diff' })
     await ui.pointer({ type: 'move', x: 5, y: 9, button: 'left', in: 'diff' })
     await ui.pointer({ type: 'up', x: 5, y: 9, button: 'left', in: 'diff' })
     await world.clock.settle()
 
-    expect(world.box.text, 'a one-line drag arms that line').toBe(
-      `${linesTokenOf('aaaaaaa', { from: 9, to: 9 })} `,
+    expect(world.box.text, 'a one-line drag includes that line').toBe(
+      `${linesCommitReferenceOf('aaaaaaa', { from: 9, to: 9 })} `,
     )
 
     await ui.pointer({ type: 'down', x: 4, y: 9, button: 'left', in: 'diff' })
     await ui.pointer({ type: 'up', x: 4, y: 9, button: 'left', in: 'diff' })
     await world.clock.settle()
 
-    expect(world.box.text, 'a click on the armed line takes the token out').toBe('')
+    expect(world.box.text, 'a click on the included line takes the commit reference out').toBe('')
     expect(await ui.find({ in: 'diff', text: /⧉/ })).toBeUndefined()
 
     await ui.unmount()
@@ -868,7 +868,7 @@ describe('register', () => {
     await ui.unmount()
   })
 
-  test('an arming and an unfocused redraw at once write the token once', async ($, on) => {
+  test('an inclusion and an unfocused redraw at once write the commit reference once', async ($, on) => {
     const world = await openedWorldOf($, on)
     await $.ui.render(FOCUSED_PANE)
 
@@ -880,10 +880,10 @@ describe('register', () => {
     await world.clock.settle()
     await $.ui.render(PANE)
 
-    expect(world.box.text).toBe(`${tokenOf('aaaaaaa')} `)
+    expect(world.box.text).toBe(`${commitReferenceOf('aaaaaaa')} `)
   })
 
-  test('inside the region, a arms the selected commit and Tab moves between commits', async ($, on) => {
+  test('inside the region, the a key includes the selected commit and Tab moves between commits', async ($, on) => {
     const world = await openedWorldOf($, on)
 
     const ui = await mountedPaneOf($)
@@ -891,7 +891,7 @@ describe('register', () => {
     await ui.key({ key: 'a', in: 'diff' })
     await world.clock.settle()
 
-    expect(world.box.text).toBe(`${tokenOf('aaaaaaa')} `)
+    expect(world.box.text).toBe(`${commitReferenceOf('aaaaaaa')} `)
 
     await ui.key({ key: 'tab', in: 'diff' })
     await world.clock.settle()
@@ -903,7 +903,7 @@ describe('register', () => {
     await ui.key({ key: 'a', in: 'diff' })
     await world.clock.settle()
 
-    expect(world.box.text).toBe(`${tokenOf('aaaaaaa')} ${tokenOf('bbbbbbb')} `)
+    expect(world.box.text).toBe(`${commitReferenceOf('aaaaaaa')} ${commitReferenceOf('bbbbbbb')} `)
 
     await ui.key({ key: 'tab', shift: true, in: 'diff' })
     await world.clock.settle()
