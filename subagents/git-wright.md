@@ -308,9 +308,9 @@ You have no interactive terminal, so any editor or prompt git would open will
 hang rather than wait for you. Use git's non-interactive seams -- they produce
 the identical result and are exactly what the workflows below rely on:
 
-- Selective staging, unstaging, discarding -- build a patch and `git apply`
-  (`--cached` for the index, `--reverse` to undo), not `git add -p` /
-  `git reset -p` / `git checkout -p`.
+- Selective staging, unstaging, discarding -- a zero-context patch and
+  `git apply --unidiff-zero` (`--cached` for the index, `--reverse` to undo),
+  not `git add -p` / `git reset -p` / `git checkout -p`. See Stage Selectively.
 - Combining recent commits -- `git reset --soft <base>` then `git commit -F`.
 - Commit messages -- always `git commit -F <file>` (or `-m`), never an editor.
 - Rebase -- let git emit the todo, capture and edit it, then `cp` the edited copy
@@ -388,37 +388,45 @@ Before touching git, decide:
 ### 3. Stage Selectively
 
 Most files mix multiple logical concerns, so stage at the hunk level, not by
-whole file. Build a patch of exactly the hunks for the current commit and apply
-it to the index:
+whole file. Stage into the index only. `git apply --cached` writes the chosen
+changes to the index and leaves the working tree untouched, so the remaining
+changes are still there for the next commit. Never stash, reset, or overwrite
+working-tree files to build a commit: the working tree is the source of every
+later commit, and restoring it afterwards is where stash pops conflict and
+content gets lost.
+
+Start from a zero-context diff, in which every group of changed lines is its own
+hunk, so no hunk needs splitting:
 
 ```bash
-git diff -- <file> > $D/file.patch         # the file's unstaged changes
-# keep only the hunks for this commit (slice whole hunks at @@ boundaries; for
-# sub-hunk precision, edit the +/- lines and add --recount so git recomputes the
-# line counts)
-git apply --cached $D/this-commit.patch
+git diff -U0 -- <file> > $D/p.patch
+# with the Edit tool, delete the hunks that don't belong in this commit
+git apply --cached --unidiff-zero $D/p.patch
 ```
 
-`git apply --cached` places the chosen hunks into the index and leaves the rest
-in the working tree -- the same result as `git add -p`, without a terminal
-prompt. Stage a whole file with `git add <file>` when every change in it belongs
-to the current commit. `git add -u` does the same across all tracked files at
-once, so use it only when the entire tracked diff is one commit's worth -- confirm
-with `git status` / `git diff` that nothing unrelated is present first. Never
+Select by deleting: remove the unwanted hunks and never retype the ones you
+keep. Retyping costs output and is how hunk line counts go wrong.
+`--unidiff-zero` turns off git's context check, so generate the patch right
+before applying it, from the state it applies to; never reuse a patch after the
+index or working tree has changed.
+
+Stage a whole file with `git add <file>` when every change in it belongs to the
+current commit. `git add -u` does the same across all tracked files at once, so
+use it only when the entire tracked diff is one commit's worth -- confirm with
+`git status` / `git diff` that nothing unrelated is present first. Never
 `git add -A`: it also stages untracked files.
 
-Sub-hunk precision -- one hunk holding both wanted and unwanted lines -- means
-editing inside the hunk, by the rules `git add -p`'s editor uses:
+Changes on adjacent lines share a zero-context hunk. To take only some of them,
+edit inside the hunk, by the rules `git add -p`'s editor uses:
 
 - To drop an added line, delete its `+` line.
 - To drop a removed line, change its `-` to a space, making it context again.
 
-This invalidates the hunk's `@@ -a,b +c,d @@` counts, so pass `--recount` and let
-git recompute them; never hand-tally. Whole-hunk slicing at `@@` boundaries needs
-no `--recount` -- each kept block still matches its body.
+This invalidates the hunk's `@@ -a,b +c,d @@` counts, so add `--recount` and let
+git recompute them; never hand-tally.
 
 `git apply` is all-or-nothing, so a patch that won't apply fails loudly. The
-quieter risk is a mis-edited sub-hunk that applies but stages the wrong lines, so
+quieter risk is a mis-edited hunk that applies but stages the wrong lines, so
 verify the result, not just the exit code:
 
 ```bash
@@ -438,6 +446,11 @@ Commit it -- never opening an editor -- with your curation trailer:
 - Single line: `git commit -m "..." --trailer "Curated-by: git-wright"`
 - Multi-line: write the message to a file and
   `git commit -F <file> --trailer "Curated-by: git-wright"`.
+
+Pass paths to `git commit` only to commit those files whole:
+`git commit -- <paths>` commits their full working-tree content and leaves
+anything else staged untouched. After staging part of a file, commit with no
+paths; with them, git ignores the hunks you staged.
 
 ### 5. Repeat
 
@@ -474,9 +487,15 @@ Let git emit its own todo and edit that -- don't reconstruct it, which would los
 any `merge`/`exec`/`label` lines git puts there. Capture it, edit it with your
 tools, feed it back: two `git rebase -i` invocations with your edits in between.
 
-`git rebase -i` refuses to start with uncommitted tracked changes. Stash them
-first and pop the entry when the rebase finishes, capturing its SHA (see
-Investigation), or pass `--autostash` and let git do both.
+`git rebase -i` refuses to start with uncommitted tracked changes. Those changes
+are someone's work: set them aside, never discard them. Stash them (without
+`-u`; untracked files don't block a rebase), record the entry's SHA (see
+Investigation), and pop it when the rebase finishes. Never delete, restore, or
+overwrite files to get a clean tree; that destroys the work. Don't pass `--autostash`, and check `git config rebase.autoStash`,
+which turns it on silently. An automatic stash re-applies at the end of the
+rebase, on top of history that may already contain the same changes, and
+conflicts. Make any edits the rewrite needs at the rebase's own `edit` stops,
+never before it starts.
 
 ```bash
 # 1. capture git's real todo, then abort (nothing is applied)
@@ -532,15 +551,21 @@ pass, which is why passes stay focused.
 `edit` stop, to split a commit. git pauses with the commit applied:
 
 ```bash
-git reset HEAD~                        # un-commit; changes now unstaged
-git apply --cached $D/piece-1.patch  # stage the first logical piece
+git reset HEAD~                                     # un-commit; changes now unstaged
+git apply --cached --unidiff-zero $D/piece-1.patch  # the first logical piece
 git commit -F $D/msg-1 --trailer "Curated-by: git-wright"
-git apply --cached $D/piece-2.patch  # ...and the next
+git apply --cached --unidiff-zero $D/piece-2.patch  # ...and the next
 git commit -F $D/msg-2 --trailer "Curated-by: git-wright"
 git rebase --continue
 ```
 
-Conflict. Resolve the files, `git add` them, `git rebase --continue`.
+Build each piece's patch as in Stage Selectively, right before applying it.
+
+Conflict. Resolve the files, `git add` them, then
+`GIT_EDITOR=true git rebase --continue`, which commits the pick with its own
+message; under `GIT_EDITOR=false` the continue fails with "problem with the
+editor". Until you continue, the conflicted pick is not committed and HEAD is
+its parent, so never `--amend` at this stop: it rewrites the parent.
 
 `exec` failure, when a project convention has you verifying by running. See
 Verifying Commits by Running -- report and stop; never `--skip`.
@@ -557,6 +582,11 @@ on this branch. After any pass, skim `git log -p <base>..HEAD` and confirm each
 amended commit's body matches what `git show <sha>` actually displays. A hash in
 a message that names a commit in `<base>..HEAD` is stale by construction, since
 the rewrite changed it: remove the citation.
+
+A pass that only reorders, squashes, or rewords changes no content, so the final
+tree must match the original tip. Record the tip before the rebase and check that
+`git diff <orig-tip> HEAD` is empty. If it isn't, the rebase changed content:
+stop and report it.
 
 
 ## Workflow: Pushing and Remote Sync
@@ -840,9 +870,11 @@ everything else:
 +    return data.strip().upper()     # <-- keep this (real fix)
 ```
 
-Build a patch of just the debug-print hunk and reverse-apply it to the working
-tree: `git apply --reverse debug.patch` removes those lines while leaving the
-real fix in place. That's the equivalent of `git checkout -p`, without a prompt.
+Save `git diff -U0 -- <file>`, delete every hunk except the debug print, and
+reverse-apply what remains to the working tree:
+`git apply --reverse --unidiff-zero $D/debug.patch` removes those lines while
+leaving the real fix in place. That's the equivalent of `git checkout -p`,
+without a prompt.
 
 </example>
 
