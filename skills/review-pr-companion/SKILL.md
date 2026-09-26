@@ -63,20 +63,14 @@ Add a worktree if the review benefits from an isolated checkout.
 ## 2. Review the diff and build the plan
 
 Run the review in a subagent so its verbose output stays out of this thread.
-Launch a general-purpose subagent to run `/code-review` or `/review-pr` (the
-plugin commands), focused as the reviewer directs, and have it return the
-findings. Fan out further subagents to verify each finding when the review
-warrants it.
+Launch a general-purpose subagent to run `pr-review-toolkit:review-pr`, focused
+as the reviewer directs, and have it return the findings rather than post them:
+the reviewer writes their own comment and turns findings into commits. Fan out
+further subagents to verify each finding when the review warrants it.
 
-Ask the reviewer how deep to review, and pass that through as `/code-review`'s
-level -- its effort scale from `low` to `max`. Any of those levels runs in the
-subagent. The billed cloud tier, `/code-review ultra`, is the exception: it is
-user-triggered, and neither the skill nor a subagent can launch it, so the
-reviewer runs it and brings its findings into the triage below.
-
-`/code-review` is built to post its verdict as a PR comment. That is off-message
-here -- the reviewer writes their own comment and turns findings into commits --
-so tell the subagent to report the findings back, not post them.
+`/code-review` is the reviewer's to run, at the depth they choose (`low` to
+`max`, or the billed cloud `ultra`). Without `--comment` it reports its findings
+instead of posting them; the reviewer brings those into the triage below.
 
 Triage the findings with the reviewer, then write `REVIEW_PLAN.md` from
 `references/REVIEW_PLAN.template.md`. It is the reviewer's document and it reads

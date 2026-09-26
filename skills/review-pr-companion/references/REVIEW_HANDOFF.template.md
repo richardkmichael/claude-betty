@@ -54,8 +54,10 @@ skipped may not apply cleanly, or may document something that does not exist.
 Fold the fixups the author took:
 
 ```bash
-git rebase -i --autosquash <base-sha>
+GIT_SEQUENCE_EDITOR=: git rebase -i --autosquash <base-sha>
 ```
+
+`GIT_SEQUENCE_EDITOR=:` accepts the todo list as generated, so no editor opens.
 
 `<base-sha>` is the commit the branch under review was cut from.
 

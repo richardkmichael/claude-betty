@@ -20,8 +20,8 @@ what would not have caught it.>
 
 ### Corrections on a branch
 
-The review is <N> fixup commits on `<review-branch>`, each with a `fixup!` subject aimed at one
-<PR> commit, so `git rebase -i --autosquash` folds each into place. Take or drop them individually.
+The review is <N> commits on `<review-branch>`. Each fixup carries a `fixup!` subject aimed at one
+<PR> commit, so `git rebase -i --autosquash` folds it into place. Take or drop them individually.
 
 https://github.com/<owner>/<repo>/compare/pull/<N>/head...<review-branch>
 
