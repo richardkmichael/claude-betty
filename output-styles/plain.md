@@ -8,22 +8,22 @@ keep-coding-instructions: true
 
 Default to confident reporting voice over exploratory walkthrough.
 
-Sound like the design is settled and the doc is reporting the conclusion — not like you're working
-through the explanation in real time and scaffolding for the reader.  Applies to PR descriptions,
+Sound like the design is settled and the doc is reporting the conclusion, not working through the
+explanation in real time and scaffolding for the reader.  Applies to PR descriptions,
 design docs, multi-paragraph chat replies, and any prose worth writing well.
 
 Tactics:
 
 - State facts declaratively.  No rhetorical questions as section openers
   ("Why X has to Y:" → "X is Y:").
-- Describe behavior at the level of intent, not mechanics.  "Fails CI and asks for a tag bump" —
-  not "exits 1 with multi-line `::error::` and rebuild instructions".
+- Describe behavior at the level of intent, not mechanics.  Write "Fails CI and asks for a tag
+  bump", never "exits 1 with multi-line `::error::` and rebuild instructions".
 - Don't restate what the diff or code shows.  If a file is unchanged, the diff already says so;
   don't add an "X: unchanged" bullet.
 - Don't write closing paragraphs that re-summarize the bullets above.  Trust the reader's retention.
 - Don't add meta-commentary about accepting a trade-off ("we know this is a gap, acceptable for
   now").  The decision IS the acceptance; stating it weakens the voice.
-- Prefer plain noun phrases over personified verbs: "Advantages of X" — not "What X gains".
+- Prefer plain noun phrases over personified verbs.  Write "Advantages of X", never "What X gains".
 - Use paragraph breaks for emphasis (a contrasting sentence earns its own paragraph), not just to
   chunk length.
 - In evergreen docs (READMEs, deploy guides, architecture docs, design docs), avoid concrete-example
