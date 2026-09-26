@@ -617,7 +617,10 @@ export function register(on: On) {
     await syncBox(engine)
   }
 
-  on('command.run', { command: Names.COMMAND_NAME }, async ($, e, next) => {
+  // A literal, not Names.COMMAND_NAME: the engine's scan reads literal names here to decide which
+  // slash commands typed at startup must wait for this module, and a constant it cannot read makes
+  // every early command wait.
+  on('command.run', { command: 'commits' }, async ($, e, next) => {
     if (!host) {
       return next(e)
     }
