@@ -115,8 +115,8 @@ over with an inline suppression or by deleting tests.
 Confirm the working branch matches what the context file specifies (`git branch --show-current`).
 If it doesn't, stop.
 
-Follow the project's commit style: terse but informative, prose for a single complex fix, bullets
-for multiple distinct changes. Explain why, not what.
+Write the message to the project's commit conventions: its stated ones (CLAUDE.md, `CONTRIBUTING`,
+a commit-lint config) first, then the style of its recent history. Explain why, not what.
 
 Stage explicitly — `git add -u` for tracked files, `git add <path>` for new ones. Never
 `git add -A`. Before committing, confirm any project instruction files the repo keeps out of
