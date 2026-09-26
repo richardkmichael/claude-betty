@@ -1,6 +1,6 @@
 ---
 name: tmux
-description: "Use interactive CLIs (git, python, gdb, etc.) with tmux by sending keystrokes and scraping pane output."
+description: "Use interactive CLIs (python, gdb, lldb, etc.) with tmux by sending keystrokes and scraping pane output."
 allowed-tools: "Read(//tmp/claude-edit-*/**), Edit(//tmp/claude-edit-*/**), Bash(tmux *), Bash(*/scripts/start-session.sh *), Bash(*/scripts/stop-session.sh *), Bash(*/scripts/send-and-wait.sh *), Bash(*/scripts/wait-for-text.sh *), Bash(*/scripts/find-sessions.sh *)"
 hooks:
   PostToolUse:
@@ -15,23 +15,20 @@ hooks:
 
 Use tmux as a programmable terminal multiplexer for interactive work.
 
-The "Base directory for this skill" path (shown at load time) is needed to run
-scripts. Use it to construct absolute paths for all script calls.
-
 ## Quickstart
 
 Always pass `-i ${CLAUDE_SESSION_ID}` when starting sessions.
 
 ```bash
 # Start a server for a purpose (returns JSON with socket/session/target/log)
-$SKILL_DIR/scripts/start-session.sh -i ${CLAUDE_SESSION_ID} -s python
+${CLAUDE_SKILL_DIR}/scripts/start-session.sh -i ${CLAUDE_SESSION_ID} -s python
 # {"socket": "claude/<id>/python", "session": "claude-python-<id>", "target": "...", "log": "..."}
 
 # Send a command and wait for expected output
-$SKILL_DIR/scripts/send-and-wait.sh -L $SOCKET -t $TARGET -c 'python -q' -p '>>>' -l
+${CLAUDE_SKILL_DIR}/scripts/send-and-wait.sh -L $SOCKET -t $TARGET -c 'python -q' -p '>>>' -l
 
 # Each purpose gets its own server
-$SKILL_DIR/scripts/start-session.sh -i ${CLAUDE_SESSION_ID} -s git
+${CLAUDE_SKILL_DIR}/scripts/start-session.sh -i ${CLAUDE_SESSION_ID} -s gdb
 ```
 
 A PostToolUse hook automatically shows the user the log path (and monitor
@@ -67,7 +64,7 @@ Run with `-h` for help.
 
 Prefer `send-and-wait.sh` — it sends the command and polls for expected output:
 ```bash
-$SKILL_DIR/scripts/send-and-wait.sh -L $SOCKET -t $TARGET -c 'print("hello")' -p 'hello' -l
+${CLAUDE_SKILL_DIR}/scripts/send-and-wait.sh -L $SOCKET -t $TARGET -c 'print("hello")' -p 'hello' -l
 ```
 `-l` sends literally (avoids shell expansion). Omit for key sequences.
 
@@ -112,8 +109,8 @@ What cannot be tested without a human at a real terminal: the full keystroke pat
 
 - Python REPL:
   ```bash
-  $SKILL_DIR/scripts/send-and-wait.sh -L $SOCKET -t $TARGET -c 'PYTHON_BASIC_REPL=1 python -q' -p '>>>'
-  $SKILL_DIR/scripts/send-and-wait.sh -L $SOCKET -t $TARGET -c 'print(42)' -p '>>>' -l
+  ${CLAUDE_SKILL_DIR}/scripts/send-and-wait.sh -L $SOCKET -t $TARGET -c 'PYTHON_BASIC_REPL=1 python -q' -p '>>>'
+  ${CLAUDE_SKILL_DIR}/scripts/send-and-wait.sh -L $SOCKET -t $TARGET -c 'print(42)' -p '>>>' -l
   ```
 - lldb/gdb: Disable paging with `set pagination off`, break with `C-c`
 
@@ -123,10 +120,11 @@ Kill your server when done. All pane output is preserved in the log file.
 
 ```bash
 # Kill one server
-$SKILL_DIR/scripts/stop-session.sh -i ${CLAUDE_SESSION_ID} -s python
+${CLAUDE_SKILL_DIR}/scripts/stop-session.sh -i ${CLAUDE_SESSION_ID} -s python
 
 # Kill all servers for this session
-$SKILL_DIR/scripts/stop-session.sh -i ${CLAUDE_SESSION_ID}
+${CLAUDE_SKILL_DIR}/scripts/stop-session.sh -i ${CLAUDE_SESSION_ID}
 ```
 
-Never use tmux `kill-server` directly.
+Stop servers with `stop-session.sh`. Never run `tmux kill-server` without `-L`: that kills the
+user's own tmux server. The script also removes the `claude/<id>/` socket entries.
