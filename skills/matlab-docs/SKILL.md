@@ -111,9 +111,9 @@ not a prompt to circumvent it.
   not-found message, do not fall back to:
   - `WebFetch` against any `mathworks.com` URL (HTTP 403 from the
     MathWorks WAF — that's exactly why this skill exists).
-  - `curl` against `mathworks.com` (the script already does this
-    internally with the right headers; rolling your own bypasses
-    the skill's request hygiene).
+  - `curl` against `mathworks.com` (the script already does this, and
+    it also catches MathWorks' 200-OK "page not found" body and strips
+    the HTML; a hand-rolled fetch skips both).
   - `find` / `grep` / `ls` against `~/Documents/MATLAB/`, the MATLAB
     application bundle, or any other local doc store. The script
     already consults these. Searching them yourself produces
