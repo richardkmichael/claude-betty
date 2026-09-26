@@ -162,6 +162,13 @@ export function register(on: On) {
   let cwd = ''
   let isOpen = false
 
+  /**
+   * False once a fill is refused because the session binds no prompt box
+   * (headless, or a surface that draws its own composer): no commit reference
+   * can ever be written, so syncs stop trying and included commits ride
+   * unwritten.
+   */
+  let hasPromptBox = true
   let model: PaneModel = EMPTY_MODEL
 
   const loads = new Map<string, Promise<void>>()
@@ -462,9 +469,11 @@ export function register(on: On) {
    * dropped, the commit references of entries no longer included leave the box,
    * and the commit references not yet in it are appended. On including and
    * excluding, at a redraw or a close for a commit reference a refused fill
-   * left behind, and at a fresh load for commit references of a module state
-   * that is gone. Syncs run one after another, so a redraw during an
-   * inclusion's own sync cannot append the same commit reference twice.
+   * left behind (a dialog held the keys), and at a fresh load for commit
+   * references of a module state that is gone. Nothing is done once the session
+   * is known to have no prompt box. Syncs run one after another, so a redraw
+   * during an inclusion's own sync cannot append the same commit reference
+   * twice.
    */
   function syncBox(engine: Host): Promise<void> {
     const run = syncing.then(() => syncBoxNow(engine))
@@ -475,6 +484,10 @@ export function register(on: On) {
   }
 
   async function syncBoxNow(engine: Host) {
+    if (!hasPromptBox) {
+      return
+    }
+
     const box = await engine.promptRead()
 
     reconcileIncluded(engine, box.text)
@@ -492,16 +505,18 @@ export function register(on: On) {
     const appended = pending.map(entry => `${entry.commitReference} `).join('')
     const lead = appended === '' || kept === '' || /\s$/.test(kept) ? '' : ' '
 
-    const { isFilled } = await engine.promptFill(
+    const filled = await engine.promptFill(
       kept === box.text
         ? { text: `${lead}${appended}`, mode: 'append' }
         : { text: `${kept}${lead}${appended}`, mode: 'replace' },
     )
 
-    if (isFilled) {
+    if (filled.isFilled) {
       for (const entry of pending) {
         entry.isWritten = true
       }
+    } else if (filled.refusal === 'no_composer') {
+      hasPromptBox = false
     }
   }
 
@@ -536,6 +551,7 @@ export function register(on: On) {
 
   on('session.start', async ($, e, next) => {
     cwd = e.cwd
+    hasPromptBox = true
 
     const engine: Host = {
       run: (argv, init) => $.process.run(argv, init),

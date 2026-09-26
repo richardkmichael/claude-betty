@@ -717,6 +717,25 @@ describe('register', () => {
     expect(world.submitted[0]?.context?.[0]).toContain(SHA_A)
   })
 
+  test('a commit reference a refused fill left behind is written at the next redraw', async ($, on) => {
+    const world = await openedWorldOf($, on)
+    await $.ui.render(FOCUSED_PANE)
+
+    world.box.isRefusing = true
+
+    await $.ui.press({ plugin: Names.PLUGIN_NAME, key: 'ask' })
+    await world.clock.settle()
+
+    expect(world.box.text, 'the fill was refused').toBe('')
+
+    world.box.isRefusing = false
+
+    await $.ui.render(PANE)
+    await world.clock.settle()
+
+    expect(world.box.text, 'written once the box takes it').toBe(`${commitReferenceOf('aaaaaaa')} `)
+  })
+
   test('/clear forgets the included commits and takes their commit references out', async ($, on) => {
     const world = worldOf(on)
 
