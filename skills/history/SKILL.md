@@ -55,14 +55,14 @@ python ${CLAUDE_SKILL_DIR}/scripts/history.py find   --name X | --uuid Y
 
 ### Targets (search and fetch)
 
-| flag          | meaning                                                       |
-| ------------- | ------------------------------------------------------------ |
-| (none)        | search: every session in the current project (the default)   |
-| `--name X`    | the session named X (any name it ever had via /rename)       |
-| `--uuid Y`    | the session UUID Y (a unique prefix works)                   |
-| `--file P`    | an explicit transcript path                                  |
-| `--project N` | every session in the project whose directory name contains N |
-| `--current`   | only the current session                                     |
+| flag          | meaning                                                                   |
+| ------------- | ------------------------------------------------------------------------- |
+| (none)        | search: every session in the current project (the default)                |
+| `--name X`    | the session named X (any name it ever had via /rename)                    |
+| `--uuid Y`    | the session UUID Y (a unique prefix works)                                |
+| `--file P`    | an explicit transcript path                                               |
+| `--project N` | search only: every session in the project whose directory name contains N |
+| `--current`   | only the current session                                                  |
 
 Names resolve current-project-first, widening to all projects on a miss. The most recently modified
 session wins a tie. Always pass `--session-id ${CLAUDE_SESSION_ID}` so the default project and
