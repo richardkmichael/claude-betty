@@ -145,7 +145,7 @@ function worldOf(
     opens.push(e)
     opened.push(e.id)
 
-    return { value: undefined }
+    return { value: { isPlaced: true as const } }
   })
 
   on('ui.close', ($, e) => {

@@ -11,6 +11,7 @@ import type {
   ToolSpec,
   UiFocusArgs,
   UiFocusResult,
+  UiOpenResult,
   UiPane,
 } from 'claude-code'
 
@@ -40,7 +41,7 @@ type Host = {
     argv: readonly string[],
     init?: ProcessRunInit,
   ) => Promise<ProcessRunResult>
-  openPane: (pane: PaneOpenArgs) => Promise<void>
+  openPane: (pane: PaneOpenArgs) => Promise<UiOpenResult>
   closePane: (pane: PaneCloseArgs) => Promise<void>
   invalidate: () => void
   uiLog: (text: string) => void
