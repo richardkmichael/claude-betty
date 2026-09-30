@@ -43,8 +43,11 @@ RECORD_SCHEMA = 1  # the statusline.py recording layout this reads
 FRESH = 60  # a session drawn this recently is still being recorded
 RENDER_WAIT = 1.0  # seconds to wait for the render of the response that made this call
 USAGE_STALE_AFTER = 300  # per-model quota data older than this is left out rather than reported
-RATE_SPANS = (15, 60)  # minutes each rate is measured over
-MIN_SPAN = 5  # minutes of history below which one whole-percent step would swamp a rate
+# Minutes each rate is measured over. The first is the current rate the exhaustion forecast uses:
+# consumption can change within a couple of minutes, when several subagents start at once. The
+# tool description names these spans, so change it with them.
+RATE_SPANS = (2, 15, 60)
+MIN_SPAN = 2  # minutes of history below which there is no rate at all
 SAME_RESET = 60  # seconds apart within which two readings belong to the same window
 WINDOW_SECONDS = {"five_hour": 5 * 3600, "seven_day": 7 * 86400}
 
@@ -192,15 +195,15 @@ def history(account):
 
 
 def rate(series, now, used, window_start, span):
-    """Percentage points per minute over the last span minutes, or None with too little to go on.
+    """(percentage points per minute, minutes measured) over the last span minutes, or None.
 
     series is [(epoch, percent)] for one window. The starting point is the reading in force when
     the span began, or the window's own start, where usage is zero by definition, when the window
     is younger than the span. Failing both, because recording began partway through, the earliest
-    reading stands in and the span actually measured is reported rather than the one asked for.
+    reading stands in. Either way the minutes actually measured are returned beside the rate.
 
-    Percentages are whole numbers, so over a minute or two a single step reads as a steep rate and
-    a projection built on it as an imminent limit. Under MIN_SPAN minutes there is no rate.
+    Percentages are whole numbers, so over a short span a single step reads as a steep rate: one
+    step in two minutes is half a point a minute. Under MIN_SPAN minutes there is no rate.
     """
     since = max(now - span * 60, window_start)
     before = [p for t, p in series if t <= since]
@@ -216,31 +219,52 @@ def rate(series, now, used, window_start, span):
     minutes = (now - base_t) / 60
     if minutes < MIN_SPAN:
         return None
-    return {
-        "percent_per_minute": round((used - base_p) / minutes, 3),
-        "over_minutes": round(minutes, 1),
-    }
+    return round((used - base_p) / minutes, 3), round(minutes, 1)
 
 
 def window_report(used, resets_at, series, now, window_seconds):
-    """One window's reading, its rates, and when it runs out at the shortest-span rate."""
-    reset_minutes = (resets_at - now) / 60
-    rates = {
-        f"last_{span}_min": rate(series, now, used, resets_at - window_seconds, span)
-        for span in RATE_SPANS
-    }
+    """One window's reading and its rate over each span.
+
+    measured_minutes is added only for a span that reaches back past the start of the window or of
+    the recording, so that a rate measured over less than its span says so.
+    """
     report = {
         "used_percent": used,
         "resets_at": iso(resets_at),
-        "resets_in_minutes": round(reset_minutes),
-        "rate": rates,
+        "resets_in_minutes": round((resets_at - now) / 60),
+        "percent_per_minute": {},
     }
-    pace = next((r["percent_per_minute"] for r in rates.values() if r), None)
-    if pace and pace > 0:
-        to_limit = (100 - used) / pace
-        report["minutes_to_limit_at_this_rate"] = round(to_limit)
-        report["reaches_limit_before_reset"] = to_limit < reset_minutes
+    measured = {}
+    for span in RATE_SPANS:
+        found = rate(series, now, used, resets_at - window_seconds, span)
+        if found is None:
+            continue
+        key = f"last_{span}_min"
+        report["percent_per_minute"][key], minutes = found
+        if minutes < span:
+            measured[key] = minutes
+    if measured:
+        report["measured_minutes"] = measured
     return report
+
+
+def exhaustion(windows):
+    """Each window's minutes until 100% at its current rate, beside its minutes until it resets.
+
+    A straight line from the current rate, and nothing more. The longer spans in each window show
+    whether that rate is a burst or steady, which is the judgement the forecast leaves to the
+    reader.
+    """
+    current = f"last_{RATE_SPANS[0]}_min"
+    forecast = {}
+    for name, window in windows.items():
+        pace = window["percent_per_minute"].get(current)
+        remaining = max(0, 100 - window["used_percent"])
+        forecast[name] = {
+            "in_minutes": round(remaining / pace) if pace and pace > 0 else None,
+            "resets_in_minutes": window["resets_in_minutes"],
+        }
+    return forecast
 
 
 def plan_report(session, rows, now):
@@ -297,11 +321,18 @@ def model_report(account, rows):
 @app.tool(
     name="get-quota",
     description=(
-        "Claude plan quota for the account this session runs on: the five-hour and seven-day plan "
-        "windows and any per-model weekly windows, each with percent used, reset time, recent "
-        "rate of use in percentage points per minute, and minutes until the limit at that rate. "
-        "Figures match the status line. Percentages are whole numbers, so short-span rates move "
-        "in steps. A rate is null until five minutes of history have been recorded for its window."
+        "Claude plan quota for the account this session runs on, counting every session and "
+        "subagent on it: the five-hour and seven-day plan windows and any per-model weekly "
+        "windows. exhaustion_at_last_2_min_rate lists every window with the minutes until it "
+        "reaches 100% if the last 2 minutes' rate continues, beside the minutes until it resets; "
+        "in_minutes is null when that rate is zero or not yet measured. Each window also has "
+        "percent used and percent_per_minute, its rate of use over the last 2, 15 and 60 "
+        "minutes, every span ending now, which shows whether the current rate is a burst or "
+        "steady. measured_minutes appears only for a span that reaches back past the start of "
+        "the window or of the recording, and gives the minutes actually covered; it says nothing "
+        "about when or how much a model was used. The data matches the status line. "
+        "Percentages are whole numbers, so the 2-minute rate moves in steps of 0.5 points a "
+        "minute."
     ),
     annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False),
 )
@@ -312,11 +343,13 @@ async def get_quota(ctx: Context) -> str:
     now = time.time()
     account = session["account_uuid"]
     rows = history(account)
+    plan = plan_report(session, rows, now)
     models, omitted = model_report(account, rows)
     answer = {
         "account": session.get("account_label"),
         "plan_as_of": iso(session["response_at"]),
-        "plan": plan_report(session, rows, now),
+        f"exhaustion_at_last_{RATE_SPANS[0]}_min_rate": exhaustion({**plan, **(models or {})}),
+        "plan": plan,
         "models": models,
     }
     if omitted:
