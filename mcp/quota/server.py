@@ -107,6 +107,11 @@ def iso(epoch):
     return datetime.datetime.fromtimestamp(epoch, datetime.UTC).isoformat(timespec="seconds")
 
 
+def iso_local(epoch):
+    """ISO 8601 in this machine's time zone for epoch seconds, to the second, offset included."""
+    return datetime.datetime.fromtimestamp(epoch).astimezone().isoformat(timespec="seconds")
+
+
 def iso_epoch(s):
     """Epoch seconds for an ISO 8601 timestamp, or 0 when it is absent or unparseable."""
     try:
@@ -138,6 +143,7 @@ class Exhaustion(BaseModel):
 class Window(OmitUnset):
     used_percent: int | float
     resets_at: str = Field(description="ISO 8601 UTC")
+    resets_at_local: str = Field(description="The same instant in the user's time zone")
     resets_in_minutes: int
     percent_per_minute: dict[str, float] = Field(
         description="Rate of use over each span, keyed last_<n>_min, every span ending now"
@@ -308,6 +314,7 @@ def window_report(used, resets_at, series, now, window_seconds):
     report = {
         "used_percent": used,
         "resets_at": iso(resets_at),
+        "resets_at_local": iso_local(resets_at),
         "resets_in_minutes": round((resets_at - now) / 60),
         "percent_per_minute": {},
     }
