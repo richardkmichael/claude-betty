@@ -46,7 +46,7 @@ USAGE_STALE_AFTER = 300  # per-model quota data older than this is left out rath
 # Minutes each rate is measured over. The first is the current rate the exhaustion forecast uses:
 # consumption can change within a couple of minutes, when several subagents start at once. The
 # tool description names these spans, so change it with them.
-RATE_SPANS = (2, 15, 60)
+RATE_SPANS = (2, 10, 20)
 MIN_SPAN = 2  # minutes of history below which there is no rate at all
 SAME_RESET = 60  # seconds apart within which two readings belong to the same window
 WINDOW_SECONDS = {"five_hour": 5 * 3600, "seven_day": 7 * 86400}
@@ -326,7 +326,7 @@ def model_report(account, rows):
         "windows. exhaustion_at_last_2_min_rate lists every window with the minutes until it "
         "reaches 100% if the last 2 minutes' rate continues, beside the minutes until it resets; "
         "in_minutes is null when that rate is zero or not yet measured. Each window also has "
-        "percent used and percent_per_minute, its rate of use over the last 2, 15 and 60 "
+        "percent used and percent_per_minute, its rate of use over the last 2, 10 and 20 "
         "minutes, every span ending now, which shows whether the current rate is a burst or "
         "steady. measured_minutes appears only for a span that reaches back past the start of "
         "the window or of the recording, and gives the minutes actually covered; it says nothing "
