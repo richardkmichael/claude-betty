@@ -1,7 +1,7 @@
 # Summary
 
-A collection of skills, subagents, hooks, output styles, and a status line for Claude Code. Each
-component is self-contained and installed independently.
+A collection of skills, subagents, hooks, output styles, a status line, and an MCP server for
+Claude Code. Each component is self-contained and installed independently.
 
 ## Subagents
 
@@ -56,6 +56,13 @@ component is self-contained and installed independently.
   fit the terminal, the least important items are dropped one at a time instead of letting the
   terminal truncate at an arbitrary column. Status line rendering records quota data, which the
   `quota` MCP server reads. Standard library only.
+
+## MCP servers
+
+- `quota` — a `get-quota` tool that tells Claude how much plan quota is left and how fast it is
+  being spent. Claude Code passes quota data only to the status line command, so `statusline.py`
+  writes it and the server only reads it. It needs that script as the status line command, drawing
+  or `--record-only`. A `PreToolUse` hook passes it the calling session's ID.
 
 ## Installation
 
@@ -171,3 +178,8 @@ To combine it with another status line producer, pipe that producer into it:
 ```
 "command": "other-producer | ~/.claude/statusline.py"
 ```
+
+### quota MCP server
+
+`mcp/quota/README.md` has the `claude mcp add` command and the `PreToolUse` hook entry. The server
+needs `uv`, and `statusline.py` installed as above.

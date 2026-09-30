@@ -2,7 +2,7 @@
 
 This repository is a collection of tooling to enhance Claude Code, organized by component type:
 hooks (`hooks/`), skills (`skills/`), subagents (`subagents/`), output styles (`output-styles/`),
-mods (`mods/`), and the status line (`statusline/`). See `README.md` for the
+mods (`mods/`), the status line (`statusline/`), and MCP servers (`mcp/`). See `README.md` for the
 catalog of components and how to install them.
 
 # Git and version control
