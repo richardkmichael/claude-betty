@@ -31,24 +31,25 @@ Environment:
                               Defaults to 4; raise it if the end of the line is clipped.
     CLAUDE_STATUSLINE_RULER   set to anything to emit a column ruler ending in '#', which is how
                               you measure the value above.
-    CLAUDE_CONFIG_DIR         honoured when locating .claude.json for the account label and the
-                              per-model quota windows.
+    CLAUDE_CONFIG_DIR         honoured when locating .claude.json for the account label, and the
+                              credentials the usage endpoint is read with.
+    CLAUDE_QUOTA_STATE        where quota data is recorded. Defaults to claude-quota under
+                              $XDG_STATE_HOME, or ~/.local/state/claude-quota.
     COLUMNS                   overrides terminal width detection.
 
 Reads the payload on stdin and .claude.json. That file supplies the account label, which the
-payload does not carry, and Claude Code's cached copy of the usage endpoint, which is where the
-per-model quota windows live -- the payload's rate_limits covers the plan's own five-hour and
-seven-day windows and nothing else.
+payload does not carry. The per-model quota windows are in neither: the payload's rate_limits
+covers the plan's own five-hour and seven-day windows and nothing else, and the per-model figures
+exist only at Anthropic's OAuth usage endpoint.
 
-Nothing in Claude Code refreshes those cached figures on a schedule. They are written only when
-`/usage` runs, and `/login` clears them outright as part of logging the old account out. So when
-they age out, go missing or turn out to belong to another account, this script starts
-`claude -p /usage` in the background to replace them, which is the one thing here that reaches
-beyond reading a file: it touches the network indirectly, and it keeps a lock file in the temp
-directory to stop every render of every open session spawning its own. A cache that is missing is
-refreshed only when the payload carries rate_limits, which is what says the account has plan limits
-worth fetching. Both the spawn and the lock are confined to refresh_usage below. A figure too old
-to trust is still shown, reading STL in place of the percentage, rather than hidden.
+So once the figures for the logged-in account are a minute old, a render starts this same script
+detached to fetch the endpoint again, reading the login's access token from the Keychain (or from
+.credentials.json off macOS) without ever renewing it. The answer is kept under the state directory,
+one subdirectory per account, and a lock file there stops every render of every open session
+starting its own fetch. This is the one thing here that reaches beyond reading a file, and it is
+confined to refresh_usage and fetch_usage below. A fetch is started only when the payload carries
+rate_limits, which is what says the account has plan limits worth fetching. A figure too old to
+trust is still shown, reading STL in place of the percentage, rather than hidden.
 
 Available data: https://code.claude.com/docs/en/statusline#available-data
 Note that `cost` and `exceeds_200k_tokens` are present in the payload but absent from the
@@ -59,13 +60,13 @@ blanks the line with no error shown. So this script catches everything and alway
 something -- an ugly status line beats an invisible one.
 """
 
+import contextlib
 import datetime
 import hashlib
 import json
 import math
 import os
 import re
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -156,16 +157,6 @@ ACCOUNT_LABELS = {
 }
 
 
-def config_dir():
-    """Directory Claude Code keeps its state in; the home directory by default.
-
-    Named separately from the file below because the refresh lock is keyed by the directory rather
-    than by the file. The directory does not identify the account on its own, since one directory
-    serves whichever account is logged in, so the account uuid is keyed alongside it.
-    """
-    return os.environ.get("CLAUDE_CONFIG_DIR") or HOME
-
-
 def claude_config():
     """Parsed .claude.json for this config dir, or {} when it cannot be read.
 
@@ -175,7 +166,7 @@ def claude_config():
     one moment the label matters. Parsed once and handed to both readers below, since parsing it
     twice would double the only measurable cost this script has.
     """
-    path = os.path.join(config_dir(), ".claude.json")
+    path = os.path.join(os.environ.get("CLAUDE_CONFIG_DIR") or HOME, ".claude.json")
     if not os.path.exists(path):
         path = os.path.join(HOME, ".claude.json")
     return read_json(path)
@@ -207,76 +198,94 @@ def claude_account(cfg):
     return email.split("@")[0]
 
 
-REFRESH_AFTER = 360  # spawn a refresh once the cached figures are older than this
-STALE_MARK = 900  # past this the refresh has plainly failed, so mark the figure
+STALE_MARK = 300  # past this several fetches have plainly failed, so mark the figure
+USAGE_FETCH_INTERVAL = 60  # fetch the per-model figures once they are older than this
+FETCH_TIMEOUT = 15  # seconds the detached fetch waits on the endpoint
+USAGE_RATE_LIMIT_BACKOFF = 300  # least wait after a 429, which carries Retry-After: 0
+
+USAGE_ENDPOINT = "https://api.anthropic.com/api/oauth/usage"
+OAUTH_BETA = "oauth-2025-04-20"
 
 
-def usage_cache(cfg):
-    """(cached usage figures, age in seconds), or ({}, inf) when they cannot be trusted at all.
+def state_dir(*parts):
+    """A path under the directory this script records into, one subdirectory per account.
 
-    Claude Code polls the usage endpoint and leaves the answer in .claude.json under
-    cachedUsageUtilization, which is what makes the per-model gauge affordable: the figures are
-    already on disk in a file that is being parsed anyway.
-
-    The one guard applied here is the account. A percentage belonging to someone else's quota is
-    the number that must never appear beside the account label, so a cache written under a
-    different login is discarded outright rather than shown. Age is returned rather than judged,
-    because how old is too old differs between the caller that renders a figure and the caller that
-    decides whether to fetch a new one.
-
-    A cache that is absent or discarded is reported as infinitely old, which is the literal truth:
-    there is no reading here of any age. That answer also serves both callers without a special
-    case for it. Nothing is drawn, because there are no windows to draw from, and a refresh is owed,
-    because the oldest possible reading is older than any threshold that could be set against it.
+    Kept apart from Claude Code's own directories, whose files are Claude Code's to write.
     """
-    cache = cfg.get("cachedUsageUtilization") or {}
-    if not cache or cache.get("accountUuid") != account_uuid(cfg):
+    root = os.environ.get("CLAUDE_QUOTA_STATE") or os.path.join(
+        os.environ.get("XDG_STATE_HOME") or os.path.join(HOME, ".local", "state"),
+        "claude-quota",
+    )
+    return os.path.join(root, *parts)
+
+
+def write_json(path, obj):
+    """Replace the file at path with obj as JSON, atomically, so no reader sees half a write."""
+    directory = os.path.dirname(path)
+    os.makedirs(directory, mode=0o700, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=directory, prefix=".tmp-")
+    try:
+        with os.fdopen(fd, "w") as f:
+            json.dump(obj, f)
+        os.replace(tmp, path)
+    except BaseException:
+        os.unlink(tmp)
+        raise
+
+
+def usage_cache(account):
+    """(the usage endpoint's last answer for this account, its age in seconds), or ({}, inf).
+
+    The directory is keyed by account, so a figure belonging to another login cannot be read here:
+    a percentage from someone else's quota is the number that must never appear beside the account
+    label. Age is returned rather than judged, because how old is too old differs between the
+    caller that renders a figure and the caller that decides whether to fetch a new one.
+
+    An answer that is absent is reported as infinitely old, which is the literal truth: there is no
+    reading here of any age. That also serves both callers without a special case. Nothing is
+    drawn, because there are no windows to draw from, and a fetch is owed, because the oldest
+    possible reading is older than any threshold that could be set against it.
+    """
+    if not account:
         return {}, math.inf
-    age = time.time() - (cache.get("fetchedAtMs") or 0) / 1000
-    return cache, max(0, age)
+    record = read_json(state_dir("accounts", account, "usage.json"))
+    usage = record.get("usage")
+    if not isinstance(usage, dict):
+        return {}, math.inf
+    return usage, max(0, time.time() - (record.get("fetched_at") or 0))
 
 
 def refresh_usage(age, has_limits, account):
-    """Start a detached `claude -p /usage` when the cached figures need replacing.
+    """Start a detached fetch of the usage endpoint when the figures for this account are old.
 
-    Nothing refreshes this cache on its own. Claude Code writes it from exactly one place, reached
-    only by `/usage` or an SDK request, and `/login` clears it as part of logging the old account
-    out, so left alone the figures are stale almost always and fresh for an hour after a command
-    the user rarely runs. `/usage` in its non-interactive form fixes that: it costs no tokens and
-    starts no session, because it reads the usage endpoint and local transcripts rather than
-    calling a model.
+    The per-model windows exist only at the endpoint; the payload never carries them. Claude Code
+    keeps a copy in .claude.json, but writes it only when `/usage` runs and refuses to rewrite one
+    younger than five minutes, so it cannot be kept fresher than that however it is driven. This
+    script calls the endpoint itself instead, which costs one small request and no process beyond
+    this one.
 
-    The spawn is detached with its streams closed, so a render never waits on it and a failure --
-    offline, expired credentials -- costs nothing but the stale figure already on screen.
+    The fetch runs as this same script in a detached child with its streams closed, so a render
+    never waits on the network, and a failure -- offline, expired credentials, a rate limit -- costs
+    nothing but the figure already on screen.
 
     A lock file rate-limits the whole machine rather than this render. The line is drawn several
-    times a minute in every open session, so without one each of them would spawn its own refresh.
+    times a minute in every open session, so without one each of them would start its own fetch.
     Claiming it with O_CREAT|O_EXCL makes the winner unambiguous when several renders race, and
-    nothing ever deletes it: its age is the record of when a refresh was last attempted, which is
-    what makes a failing refresh retry on the same slow cadence as a working one.
-
-    The lock is keyed by config directory and account together, so an account switched to partway
-    through a session gets its first refresh straight away rather than waiting out the lock taken
-    for the account before it. A config carrying no account uuid keys on the directory alone.
+    nothing ever deletes it: its age is the record of when a fetch was last attempted, which is
+    what makes a failing fetch retry on the same cadence as a working one. It is keyed by account,
+    so a login switched to partway through a session gets its first fetch straight away.
 
     has_limits reports whether the payload carried rate_limits, and it is the whole test for
     whether a fetch is worth making: the block is present only on a subscription session, so an API
-    key, Bedrock or Vertex session has no plan limits to read and no cache age gets it here. Given
-    a subscription session, a cache that is missing or belongs to another account is as good a
-    reason to fetch as one that has aged out, which is what fills the gauge after `/login` and on a
-    machine that has never run `/usage` at all.
+    key, Bedrock or Vertex session has no plan limits to read and never gets here.
     """
-    if not has_limits or age <= REFRESH_AFTER:
+    if not has_limits or not account or age <= USAGE_FETCH_INTERVAL:
         return
-    claude = shutil.which("claude") or os.path.join(HOME, ".local/bin/claude")
-    if not os.path.exists(claude):
-        return
-    identity = f"{config_dir()}\0{account}" if account else config_dir()
-    key = hashlib.sha256(identity.encode()).hexdigest()[:12]
-    lock = os.path.join(tempfile.gettempdir(), f"claude-statusline-usage-{key}.lock")
+    lock = state_dir("accounts", account, "fetch.lock")
     try:
-        if time.time() - os.stat(lock).st_mtime <= REFRESH_AFTER:
-            return  # a refresh was attempted recently enough
+        os.makedirs(os.path.dirname(lock), mode=0o700, exist_ok=True)
+        if time.time() - os.stat(lock).st_mtime <= USAGE_FETCH_INTERVAL:
+            return  # a fetch was attempted recently enough, or a rate limit said to wait
         os.unlink(lock)
     except OSError:
         pass  # absent, or already taken by a racing render
@@ -286,7 +295,7 @@ def refresh_usage(age, has_limits, account):
         return  # another render claimed it first
     try:
         subprocess.Popen(
-            [claude, "-p", "/usage"],
+            [sys.executable, os.path.abspath(__file__), "--fetch-usage", account],
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -297,7 +306,105 @@ def refresh_usage(age, has_limits, account):
         pass
 
 
-def model_windows(cache):
+def credential_service():
+    """The Keychain service name Claude Code stores this config dir's OAuth credentials under.
+
+    `Claude Code-credentials`, with `-` and the first eight hex digits of the SHA-256 of the
+    NFC-normalised directory appended whenever CLAUDE_CONFIG_DIR is set, so that several logins can
+    coexist. Read out of the bundle; worth re-checking after an upgrade.
+    """
+    import unicodedata  # the detached fetch is the only caller, so renders never import it
+
+    directory = os.environ.get("CLAUDE_CONFIG_DIR")
+    if not directory:
+        return "Claude Code-credentials"
+    normalised = unicodedata.normalize("NFC", os.path.normpath(os.path.expanduser(directory)))
+    return "Claude Code-credentials-" + hashlib.sha256(normalised.encode()).hexdigest()[:8]
+
+
+def access_token():
+    """The current login's OAuth access token, or None when it is missing or has expired.
+
+    Read only, never renewed. A running Claude Code renews its own token, and this script runs only
+    beneath one, so an expired token means the next API response is about to replace it; renewing
+    it here could rotate the refresh token out from under Claude Code. macOS keeps the credentials
+    in the Keychain, other platforms in .credentials.json inside the config dir.
+    """
+    import getpass  # the detached fetch is the only caller, so renders never import it
+
+    try:
+        if sys.platform == "darwin":
+            user = os.environ.get("USER") or getpass.getuser()
+            found = subprocess.run(
+                ["security", "find-generic-password", "-s", credential_service(), "-a", user, "-w"],
+                capture_output=True,
+                text=True,
+                timeout=FETCH_TIMEOUT,
+                check=False,
+            )
+            blob = json.loads(found.stdout) if found.returncode == 0 else {}
+        else:
+            claude_dir = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.join(HOME, ".claude")
+            blob = read_json(os.path.join(claude_dir, ".credentials.json"))
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return None
+    oauth = (blob.get("claudeAiOauth") if isinstance(blob, dict) else None) or {}
+    expires = oauth.get("expiresAt")
+    if expires and expires / 1000 <= time.time():
+        return None
+    return oauth.get("accessToken")
+
+
+def fetch_usage(account):
+    """Fetch the usage endpoint for account and record the answer; the detached child's whole job.
+
+    The answer is recorded only if the login is still the account the fetch was started for. The
+    token is read from whatever is logged in now, so a `/login` between the render and the request
+    would otherwise file one account's figures under the other.
+
+    A 429 moves the lock's timestamp forward, so the renders that follow wait before trying again
+    instead of retrying on the usual cadence. The wait is the Retry-After it carries, but never
+    less than USAGE_RATE_LIMIT_BACKOFF: the endpoint sends `Retry-After: 0`, which taken at its word
+    has every render in every session retry at once, a request every few seconds.
+    """
+    # Imported here rather than at the top: urllib.request alone takes about as long to import as a
+    # whole render does to run, and only this detached child ever makes a request.
+    import urllib.error
+    import urllib.request
+
+    token = access_token()
+    if not token:
+        return
+    request = urllib.request.Request(
+        USAGE_ENDPOINT,
+        headers={
+            "Authorization": "Bearer " + token,
+            "anthropic-beta": OAUTH_BETA,
+            "Accept": "application/json",
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=FETCH_TIMEOUT) as response:
+            usage = json.load(response)
+    except urllib.error.HTTPError as exc:
+        if exc.code == 429:
+            try:
+                wait = max(float(exc.headers.get("retry-after") or 0), USAGE_RATE_LIMIT_BACKOFF)
+                resume = time.time() + wait - USAGE_FETCH_INTERVAL
+                os.utime(state_dir("accounts", account, "fetch.lock"), (resume, resume))
+            except (OSError, ValueError):
+                pass
+        return
+    except (OSError, ValueError):
+        return
+    if not isinstance(usage, dict) or account_uuid(claude_config()) != account:
+        return
+    write_json(
+        state_dir("accounts", account, "usage.json"), {"fetched_at": time.time(), "usage": usage}
+    )
+
+
+def model_windows(usage):
     """[(model name, percent used, epoch it resets)] for each per-model quota window.
 
     Some plans meter a model against its own allowance as well as the plan's. That allowance runs
@@ -322,7 +429,7 @@ def model_windows(cache):
     # The schema does not stop a model appearing under more than one window. Only the tightest is
     # worth a slot on the line, and its reset time is what says which window that slot is showing.
     worst = {}
-    for limit in (cache.get("utilization") or {}).get("limits") or []:
+    for limit in usage.get("limits") or []:
         name = (((limit.get("scope") or {}).get("model") or {}).get("display_name") or "").strip()
         pct, reset = limit.get("percent"), iso_epoch(limit.get("resets_at"))
         if not name or not isinstance(pct, (int, float)) or 0 < reset <= time.time():
@@ -475,8 +582,9 @@ def build(data):
     # the 7d gauge and the marker is written once, at the end of the run. Only a run starting at the
     # first window can be joined: a window on some other cadence sits between the gauges as an
     # ordinary item, and a marker past it would no longer read as the 7d gauge's reset.
-    cache, age = usage_cache(cfg)
-    windows = model_windows(cache)
+    account = account_uuid(cfg)
+    usage, age = usage_cache(account)
+    windows = model_windows(usage)
     limits = g("rate_limits") or {}
     weekly_reset = (limits.get("seven_day") or {}).get("resets_at") or 0
     shared = 0
@@ -521,8 +629,8 @@ def build(data):
             left = until(reset)
         add("model_quota", LEFT, f"{gauge} {left}" if left else gauge, WEEKLY if joined else None)
     # The payload's rate_limits is the test for whether this account has plan limits at all, so it
-    # is what says a refresh is worth spawning, whatever state the cache is in.
-    refresh_usage(age, bool(limits), account_uuid(cfg))
+    # is what says a fetch is worth starting, whatever state the recorded figures are in.
+    refresh_usage(age, bool(limits), account)
 
     # ── Centre: where ─────────────────────────────────────────────────────────
     pr = g("pr") or {}
@@ -610,6 +718,11 @@ def main():
 
 
 if __name__ == "__main__":
+    if sys.argv[1:2] == ["--fetch-usage"]:
+        # The detached child refresh_usage starts. Nobody reads its output or its exit status.
+        with contextlib.suppress(Exception):
+            fetch_usage(sys.argv[2])
+        sys.exit(0)
     try:
         line = main()
     except Exception as exc:

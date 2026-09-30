@@ -146,14 +146,15 @@ the file maps an email address to the account name shown for it. The module docs
 environment variables that tune width detection, including the column ruler used to measure how
 many columns the host's own chrome occupies.
 
-One thing to know before installing it: the per-model gauge reads figures Claude Code caches from
-its usage endpoint, and nothing refreshes those on a schedule — they are written only when
-`/usage` runs. So once they pass six minutes old, a render starts `claude -p /usage` in the
-background to replace them. That command costs no tokens and starts no session, the spawn is
-detached so no render ever waits on it, and a lock file in the temp directory keeps concurrent
-sessions to one refresh between them. A figure too old to trust reads `STL` in place of the
-percentage rather than quietly showing a stale number. This is the only part of the script that
-reaches beyond reading a file, and it is confined to one function.
+One thing to know before installing it: the per-model gauge needs data that only Anthropic's
+OAuth usage endpoint reports, so the script fetches it itself. Once the data for the
+logged-in account is a minute old, a render starts the script again in the background to call the
+endpoint, reading the login's access token from the Keychain (or from `.credentials.json` off
+macOS) without renewing it. The request costs no tokens, the fetch is detached so no render ever
+waits on it, and a lock file keeps concurrent sessions to one fetch a minute between them. The
+answers are kept under `~/.local/state/claude-quota/`, one directory per account. A value
+too old to trust reads `STL` in place of the percentage rather than quietly showing a stale
+number. This is the only part of the script that reaches beyond reading a file.
 
 To combine it with another status line producer, pipe that producer into it:
 
