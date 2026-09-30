@@ -54,7 +54,8 @@ component is self-contained and installed independently.
   weekly allowance, that window gets a gauge of its own beside the plan's, because the plan gauge
   alone reads reassuringly right up to the point the model stops answering. When the line will not
   fit the terminal, the least important items are dropped one at a time instead of letting the
-  terminal truncate at an arbitrary column. Standard library only.
+  terminal truncate at an arbitrary column. Status line rendering records quota data, which the
+  `quota` MCP server reads. Standard library only.
 
 ## Installation
 
@@ -155,6 +156,15 @@ waits on it, and a lock file keeps concurrent sessions to one fetch a minute bet
 answers are kept under `~/.local/state/claude-quota/`, one directory per account. A value
 too old to trust reads `STL` in place of the percentage rather than quietly showing a stale
 number. This is the only part of the script that reaches beyond reading a file.
+
+Every render also records the figures it read under the same directory, for the `quota` MCP server
+to answer from. `statusline/RECORDING.md` describes the layout. To keep the recording without
+drawing a line, and so keep Claude Code's own footer, run it with `--record-only`: it prints
+nothing and exits 0, which Claude Code treats the same as having no status line.
+
+```json
+"command": "~/.claude/statusline.py --record-only"
+```
 
 To combine it with another status line producer, pipe that producer into it:
 

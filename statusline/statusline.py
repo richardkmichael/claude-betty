@@ -10,6 +10,11 @@ Point settings.json at it:
       "padding": 2
     }
 
+To record without drawing anything -- for the quota MCP server, while keeping Claude Code's own
+footer -- run it as `~/.claude/statusline.py --record-only`. That prints nothing and exits 0, which
+Claude Code treats exactly as having no status line, without logging a failure the way a non-zero
+exit would.
+
 Vim mode is deliberately not rendered here. Claude Code shows it on its own line beneath the status
 line, which costs no width -- so leave hideVimModeIndicator unset. The PR badge is the opposite
 case: this script draws it, so `prStatusFooterEnabled: false` turns off the duplicate in Claude
@@ -50,6 +55,12 @@ starting its own fetch. This is the one thing here that reaches beyond reading a
 confined to refresh_usage and fetch_usage below. A fetch is started only when the payload carries
 rate_limits, which is what says the account has plan limits worth fetching. A figure too old to
 trust is still shown, reading STL in place of the percentage, rather than hidden.
+
+Every render also records what the payload reported, under the same state directory: the session's
+latest reading, rewritten each time, and a per-account history appended to only when a new API
+response moves a figure. The quota MCP server reads both, so that it answers with the figures this
+line shows and can say how fast they are moving. RECORDING.md beside this script describes the
+layout. A recording that fails never costs the line.
 
 Available data: https://code.claude.com/docs/en/statusline#available-data
 Note that `cost` and `exceeds_200k_tokens` are present in the payload but absent from the
@@ -399,9 +410,151 @@ def fetch_usage(account):
         return
     if not isinstance(usage, dict) or account_uuid(claude_config()) != account:
         return
-    write_json(
-        state_dir("accounts", account, "usage.json"), {"fetched_at": time.time(), "usage": usage}
-    )
+    now = time.time()
+    path = state_dir("accounts", account, "usage.json")
+    previous = (read_json(path).get("usage") or {}).get("limits")
+    write_json(path, {"fetched_at": now, "usage": usage})
+    if limits_moved(previous, usage.get("limits")):
+        append_history(account, {"t": now, "source": "endpoint", "limits": usage.get("limits")})
+    prune(account)
+
+
+def limits_moved(before, after):
+    """Whether two answers' limits differ in anything but the precision of their reset times.
+
+    The endpoint computes resets_at afresh on every request, to the microsecond, so comparing the
+    answers whole would find a change in every fetch and write a history row a minute. What counts
+    is each window's kind, model, percentage and the minute it resets.
+    """
+
+    def key(limits):
+        return [
+            (
+                limit.get("kind"),
+                ((limit.get("scope") or {}).get("model") or {}).get("display_name"),
+                limit.get("percent"),
+                round(iso_epoch(limit.get("resets_at")) / 60),
+            )
+            for limit in limits or []
+            if isinstance(limit, dict)
+        ]
+
+    return key(before) != key(after)
+
+
+# ── recording ─────────────────────────────────────────────────────────────────
+#
+# Every render records what the payload reported, so that the quota MCP server can answer with the
+# figures this line shows, and work out how fast they are moving. RECORDING.md beside this script
+# describes the layout; it is a contract with that server.
+
+RECORD_SCHEMA = 1
+KEEP_SESSIONS = 7 * 86400  # a session file untouched for this long is deleted
+KEEP_HISTORY = 9 * 86400  # history outlives the seven-day window it describes, with a day's margin
+
+
+def append_history(account, row):
+    """Append row to the account's history for the UTC day it was taken.
+
+    One file per day, so pruning deletes whole files and never rewrites one that a render in
+    another session may be appending to at that moment.
+    """
+    day = time.strftime("%Y-%m-%d", time.gmtime(row["t"]))
+    path = state_dir("accounts", account, "history", f"{day}.jsonl")
+    os.makedirs(os.path.dirname(path), mode=0o700, exist_ok=True)
+    with open(path, "a") as f:
+        f.write(json.dumps(row) + "\n")
+
+
+def prune(account):
+    """Delete session files and history days old enough that nothing reads them any more."""
+    now = time.time()
+    for directory, keep in (
+        (state_dir("sessions"), KEEP_SESSIONS),
+        (state_dir("accounts", account, "history"), KEEP_HISTORY),
+    ):
+        try:
+            names = os.listdir(directory)
+        except OSError:
+            continue
+        for name in names:
+            path = os.path.join(directory, name)
+            with contextlib.suppress(OSError):
+                if now - os.stat(path).st_mtime > keep:
+                    os.unlink(path)
+
+
+def record(data, cfg):
+    """Write this session's latest reading, and append to its account's history when it moved.
+
+    The session file is rewritten on every render, so its rendered_at says whether the line is
+    still being drawn. Two further fields say whether its reading can be trusted, because the
+    payload's rate_limits is only the last API response's, repeated on every render until the next
+    one arrives:
+
+    - response_at moves when a new API response arrives, which is when the token counts and cost
+      in the payload change. An idle re-render leaves them alone.
+    - matches_login says whether the reading is the logged-in account's; see login_owns.
+
+    A history row is appended on a response that moved a reading the login owns, and on the first
+    such response after the reading came to match the login, so an idle session writes nothing
+    however often it re-renders. That first row anchors the history: a reading that has not moved
+    since it is a measured rate of zero, where no row at all would leave the rate unknown. A
+    reading left over from before `/login` is never filed under the account that replaced it.
+    """
+    session = data.get("session_id")
+    if not session:
+        return
+    now = time.time()
+    path = state_dir("sessions", f"{session}.json")
+    previous = read_json(path)
+    account = account_uuid(cfg)
+    limits = data.get("rate_limits") or {}
+    windows = {key: limits[key] for key in ("five_hour", "seven_day") if limits.get(key)} or None
+    cw = data.get("context_window") or {}
+    marker = [
+        (data.get("cost") or {}).get("total_cost_usd"),
+        cw.get("total_input_tokens"),
+        cw.get("total_output_tokens"),
+    ]
+    responded = bool(previous) and previous.get("marker") != marker
+    owned = login_owns(account, windows)
+    current = {
+        "schema": RECORD_SCHEMA,
+        "session_id": session,
+        "claude_pid": os.environ.get("CLAUDE_PID"),
+        "account_uuid": account,
+        "account_label": claude_account(cfg),
+        "rendered_at": now,
+        "response_at": now if responded else previous.get("response_at"),
+        "matches_login": owned,
+        "marker": marker,
+        "rate_limits": windows,
+    }
+    write_json(path, current)
+    moved = windows != previous.get("rate_limits")
+    if responded and owned and (moved or not previous.get("matches_login")):
+        append_history(account, {"t": now, "source": "payload", "session_id": session, **windows})
+
+
+def login_owns(account, windows):
+    """Whether windows, the payload's plan reading, belong to account, the login .claude.json names.
+
+    After `/login` a session can go on reporting the previous login's figures for several
+    responses, not only until its next one: the session that ran `/login` switches at once, but
+    the others take a while. The payload names no account, so the reading is matched against the
+    account's own figures instead. The seven-day window resets at one fixed instant for the whole
+    week, a different one for every account, and the usage endpoint reports it for the login.
+
+    A login whose first fetch has not landed yet has nothing to match against, so its readings are
+    unconfirmed for the few seconds that takes.
+    """
+    if not account or not windows or "seven_day" not in windows:
+        return False
+    usage = read_json(state_dir("accounts", account, "usage.json")).get("usage") or {}
+    weekly = iso_epoch((usage.get("seven_day") or {}).get("resets_at"))
+    reading = windows["seven_day"].get("resets_at") or 0
+    return bool(weekly) and abs(weekly - reading) <= SAME_RESET
 
 
 def model_windows(usage):
@@ -545,14 +698,13 @@ SAME_RESET = 60  # seconds apart within which two windows reset at the same inst
 DROP_ORDER = ("dirs", "think", "effort", "pr", "7d", "model_quota", "account", "5h", "ctx", "model")
 
 
-def build(data):
+def build(data, cfg):
     """Return [(priority, section, text, group)], priority being the item's place in DROP_ORDER.
 
     The group is None for an item that stands on its own, and a tag shared with the neighbours it
     reports one window alongside.
     """
     g = data.get
-    cfg = claude_config()
     out = []
 
     def add(name, section, text, group=None):
@@ -689,13 +841,13 @@ def justify(left, centre, right, width):
     return left + " " * lead + centre + " " * trail + right
 
 
-def fit(data, width):
+def fit(data, width, cfg):
     """Drop the least important items until it fits.
 
     A status line that overflows wraps or truncates at an arbitrary point, so choosing what to lose
     beats letting the terminal choose.
     """
-    items = build(data)
+    items = build(data, cfg)
     while items:
         line = justify(*assemble(items), width)
         if width <= 0 or visible_len(line) <= width:
@@ -704,17 +856,28 @@ def fit(data, width):
     return ""
 
 
-def main():
+def main(record_only):
     try:
         data = json.load(sys.stdin)
     except Exception:
         return ""  # no payload: nothing sensible to draw
+    cfg = claude_config()
+    # A recording that fails must not cost the line. The MCP server that reads it reports a
+    # recording gone stale as an error, so a failure here still surfaces where it matters.
+    with contextlib.suppress(Exception):
+        record(data, cfg)
+    if record_only:
+        # Nothing is drawn, but the per-model figures are still kept fresh for the MCP server.
+        account = account_uuid(cfg)
+        _, age = usage_cache(account)
+        refresh_usage(age, bool(data.get("rate_limits")), account)
+        return ""
     width = render_width()
     if os.environ.get("CLAUDE_STATUSLINE_RULER"):
         # Every tenth column is marked; the final column is '#'. Whether '#' survives tells you
         # exactly how many columns the host chrome is really taking.
         return "".join(str(c // 10 % 10) if c % 10 == 0 else "." for c in range(1, width)) + "#"
-    return fit(data, width)
+    return fit(data, width, cfg)
 
 
 if __name__ == "__main__":
@@ -723,11 +886,13 @@ if __name__ == "__main__":
         with contextlib.suppress(Exception):
             fetch_usage(sys.argv[2])
         sys.exit(0)
+    record_only = "--record-only" in sys.argv[1:]
     try:
-        line = main()
+        line = main(record_only)
     except Exception as exc:
-        # Never blank the line over a rendering bug; show enough to debug it.
-        line = f"statusline error: {type(exc).__name__}: {exc}"[:200]
+        # Never blank the line over a rendering bug; show enough to debug it. A record-only run
+        # draws nothing even then: it stands in for having no status line at all.
+        line = "" if record_only else f"statusline error: {type(exc).__name__}: {exc}"[:200]
     if line:
         print(line)
     sys.exit(0)
