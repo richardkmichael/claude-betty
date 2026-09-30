@@ -1,12 +1,11 @@
 # quota
 
-An MCP server with one tool, `get-quota`, that tells Claude how much of the plan's quota is left
-and how fast it is being spent, so that it can decide whether to start more work or wind down. It
-reports the five-hour and seven-day plan windows and any per-model weekly windows, each with the
-percentage used, the reset time, and the rate of use over the last 2, 10 and 20 minutes. A
-forecast lists every window with the minutes until it runs out if the last 2 minutes' rate
-continues, beside the minutes until it resets. The longer spans show whether that rate is a burst
-or steady.
+An MCP server with one tool, `get-quota`, that tells Claude how much of the plan's quota is left and
+how fast it is being spent, so that it can decide what work to start. It reports the five-hour and
+seven-day plan windows and any per-model weekly windows, each with the percentage used, the reset
+time, and the rate of use over the last 2, 10 and 20 minutes. A forecast lists every window with the
+minutes until it runs out if the last 2 minutes' rate continues, beside the minutes until it resets.
+The longer spans show whether that rate is a burst or steady.
 
 The data is what the status line shows. The server fetches nothing: it reads what
 `statusline/statusline.py` records on every render, as described in `statusline/RECORDING.md`.

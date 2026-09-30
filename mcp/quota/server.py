@@ -51,7 +51,35 @@ MIN_SPAN = 2  # minutes of history below which there is no rate at all
 SAME_RESET = 60  # seconds apart within which two readings belong to the same window
 WINDOW_SECONDS = {"five_hour": 5 * 3600, "seven_day": 7 * 86400}
 
-app = MCPServer("quota")
+# Shown to the model at session start, unlike the tool description, which a session with many tools
+# loads only on demand. So what prompts a call, and how to act on the answer, belong here.
+INSTRUCTIONS = """\
+get-quota reports how much of the Claude plan's quota is left and how fast it is being spent. Call
+it before starting large or parallel work, such as several subagents or a long multi-step task, and
+when the user asks about quota or limits. It does not need calling on every turn.
+
+Use it to decide what to start, never to slow down. Work as fast as the task allows: do not pause
+agents, reduce parallelism or put work off to make quota last until a reset. Reaching a limit only
+pauses work until that window resets, and quota left unused at a reset is lost. Work that as a
+whole spans several five-hour windows is normal. The rates count every session on the account,
+including other sessions and other machines you cannot see. Use you did not cause is normal: plan
+around it, and do not investigate it.
+
+Before starting new work, estimate how long it will take, and compare that with the smallest
+in_minutes in exhaustion_at_last_2_min_rate, shortened for the work you are about to add, since
+each extra parallel agent raises the rate. Then:
+
+1. If the seven-day window would run out before it resets, do not start: tell the user and ask
+   first. That window takes days to reset.
+2. If the work will finish before the limit, start it.
+3. If it will not, do not start it now. Start work that will finish before the limit instead, or a
+   part of it that reaches a checkpoint, and tell the user when the limit is expected and when the
+   window resets, in local time. Work already running carries on.
+
+Check the 2-minute rate against the 10- and 20-minute rates before acting on it: one whole-percent
+step can make the 2-minute rate look like a burst."""
+
+app = MCPServer("quota", instructions=INSTRUCTIONS)
 
 
 def state_dir(*parts):
