@@ -37,7 +37,7 @@ from uuid import UUID
 from mcp.server.mcpserver import Context, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ToolAnnotations
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_serializer
 
 RECORD_SCHEMA = 1  # the statusline.py recording layout this reads
 FRESH = 60  # a session drawn this recently is still being recorded
@@ -113,6 +113,55 @@ def iso_epoch(s):
         return datetime.datetime.fromisoformat(s.replace("Z", "+00:00")).timestamp()
     except (AttributeError, ValueError):
         return 0
+
+
+class OmitUnset(BaseModel):
+    """A result model whose optional fields are left out when unset, rather than sent as null.
+
+    measured_minutes, for one, means something only when present, and a null on every window
+    would read as a value.
+    """
+
+    @model_serializer(mode="wrap")
+    def _omit_unset(self, handler):
+        return {key: value for key, value in handler(self).items() if value is not None}
+
+
+class Exhaustion(BaseModel):
+    in_minutes: int | None = Field(
+        description="Minutes until 100% at the current rate; null when that rate is zero or "
+        "unmeasured"
+    )
+    resets_in_minutes: int
+
+
+class Window(OmitUnset):
+    used_percent: int | float
+    resets_at: str = Field(description="ISO 8601 UTC")
+    resets_in_minutes: int
+    percent_per_minute: dict[str, float] = Field(
+        description="Rate of use over each span, keyed last_<n>_min, every span ending now"
+    )
+    measured_minutes: dict[str, float] | None = Field(
+        default=None,
+        description="Minutes actually covered, only for a span reaching back past the start of "
+        "the window or of the recording",
+    )
+    fetched_seconds_ago: int | None = Field(
+        default=None, description="Per-model windows only: age of the usage-endpoint reading"
+    )
+
+
+class Quota(OmitUnset):
+    """What get-quota returns. The SDK derives the tool's outputSchema from this."""
+
+    account: str | None = None
+    plan_as_of: str = Field(description="When this session's last API response arrived")
+    # Named for RATE_SPANS[0]; change the name with it.
+    exhaustion_at_last_2_min_rate: dict[str, Exhaustion]
+    plan: dict[str, Window]
+    models: dict[str, Window] | None = None
+    note: str | None = None
 
 
 class InjectedArgs(BaseModel):
@@ -364,7 +413,7 @@ def model_report(account, rows):
     ),
     annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False),
 )
-async def get_quota(ctx: Context) -> str:
+async def get_quota(ctx: Context) -> Quota:
     injected = injected_args(ctx)
     session = await current_session(injected.session_id)
     check(session)
@@ -376,13 +425,13 @@ async def get_quota(ctx: Context) -> str:
     answer = {
         "account": session.get("account_label"),
         "plan_as_of": iso(session["response_at"]),
-        f"exhaustion_at_last_{RATE_SPANS[0]}_min_rate": exhaustion({**plan, **(models or {})}),
+        "exhaustion_at_last_2_min_rate": exhaustion({**plan, **(models or {})}),
         "plan": plan,
         "models": models,
     }
     if omitted:
         answer["note"] = omitted
-    return json.dumps(answer, indent=2)
+    return Quota.model_validate(answer)
 
 
 if __name__ == "__main__":
