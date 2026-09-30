@@ -209,8 +209,8 @@ def claude_account(cfg):
     return email.split("@")[0]
 
 
-STALE_MARK = 300  # past this several fetches have plainly failed, so mark the figure
 USAGE_FETCH_INTERVAL = 60  # fetch the per-model figures once they are older than this
+USAGE_STALE_AFTER = 300  # past this several fetches have plainly failed, so mark the figure
 FETCH_TIMEOUT = 15  # seconds the detached fetch waits on the endpoint
 USAGE_RATE_LIMIT_BACKOFF = 300  # least wait after a 429, which carries Retry-After: 0
 
@@ -768,7 +768,7 @@ def build(data, cfg):
     # below should already have replaced, so the honest report is that the number is unknown
     # rather than a number carrying a warning, which still invites being read. It is the width of
     # the percentage it stands in for, so the line does not shift as it comes and goes.
-    stale = age > STALE_MARK
+    stale = age > USAGE_STALE_AFTER
     for i, (name, pct, reset) in enumerate(windows):
         gauge = f"{name.lower()} {'STL' if stale else str(int(pct)) + '%'}"
         # A window joined to the 7d gauge shows no marker until the end of the run, where the reset
