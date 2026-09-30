@@ -155,14 +155,16 @@ environment variables that tune width detection, including the column ruler used
 many columns the host's own chrome occupies.
 
 One thing to know before installing it: the per-model gauge needs data that only Anthropic's
-OAuth usage endpoint reports, so the script fetches it itself. Once the data for the
-logged-in account is a minute old, a render starts the script again in the background to call the
-endpoint, reading the login's access token from the Keychain (or from `.credentials.json` off
-macOS) without renewing it. The request costs no tokens, the fetch is detached so no render ever
-waits on it, and a lock file keeps concurrent sessions to one fetch a minute between them. The
-answers are kept under `~/.local/state/claude-quota/`, one directory per account. A value
-too old to trust reads `STL` in place of the percentage rather than quietly showing a stale
-number. This is the only part of the script that reaches beyond reading a file.
+OAuth usage endpoint reports, so the script fetches it itself. Once the data for the logged-in
+account is a minute old, a render starts the script again in the background to call the endpoint,
+reading the login's access token from the Keychain (or from `.credentials.json` off macOS) without
+renewing it. The request costs no tokens, the fetch is detached so no render ever waits on it, and a
+lock file keeps concurrent sessions to one fetch a minute between them. When the endpoint
+rate-limits a fetch, which it does without saying how long to wait, the next attempt waits at least
+five minutes, and every attempt is logged so the undocumented limit can be read off. The answers are
+kept under `~/.local/state/claude-quota/`, one directory per account. A value too old to trust
+reads `STL` in place of the percentage rather than quietly showing a stale number. This is the only
+part of the script that reaches beyond reading a file.
 
 Every render also records the figures it read under the same directory, for the `quota` MCP server
 to answer from. `statusline/RECORDING.md` describes the layout. To keep the recording without

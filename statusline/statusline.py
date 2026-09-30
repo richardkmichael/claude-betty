@@ -385,6 +385,7 @@ def fetch_usage(account):
 
     token = access_token()
     if not token:
+        log_fetch(account, "no_token")
         return
     request = urllib.request.Request(
         USAGE_ENDPOINT,
@@ -398,6 +399,7 @@ def fetch_usage(account):
         with urllib.request.urlopen(request, timeout=FETCH_TIMEOUT) as response:
             usage = json.load(response)
     except urllib.error.HTTPError as exc:
+        log_fetch(account, exc.code, exc.headers.get("retry-after"))
         if exc.code == 429:
             try:
                 wait = max(float(exc.headers.get("retry-after") or 0), USAGE_RATE_LIMIT_BACKOFF)
@@ -406,10 +408,13 @@ def fetch_usage(account):
             except (OSError, ValueError):
                 pass
         return
-    except (OSError, ValueError):
+    except (OSError, ValueError) as exc:
+        log_fetch(account, type(exc).__name__)
         return
     if not isinstance(usage, dict) or account_uuid(claude_config()) != account:
+        log_fetch(account, "discarded")
         return
+    log_fetch(account, 200)
     now = time.time()
     path = state_dir("accounts", account, "usage.json")
     previous = (read_json(path).get("usage") or {}).get("limits")
@@ -453,25 +458,40 @@ KEEP_SESSIONS = 7 * 86400  # a session file untouched for this long is deleted
 KEEP_HISTORY = 9 * 86400  # history outlives the seven-day window it describes, with a day's margin
 
 
-def append_history(account, row):
-    """Append row to the account's history for the UTC day it was taken.
+def append_history(account, row, directory="history"):
+    """Append row to one of the account's day files, for the UTC day it was taken.
 
     One file per day, so pruning deletes whole files and never rewrites one that a render in
-    another session may be appending to at that moment.
+    another session may be appending to at that moment. directory is "history" for the readings
+    the MCP server reads, or "fetches" for the fetch log.
     """
     day = time.strftime("%Y-%m-%d", time.gmtime(row["t"]))
-    path = state_dir("accounts", account, "history", f"{day}.jsonl")
+    path = state_dir("accounts", account, directory, f"{day}.jsonl")
     os.makedirs(os.path.dirname(path), mode=0o700, exist_ok=True)
     with open(path, "a") as f:
         f.write(json.dumps(row) + "\n")
 
 
+def log_fetch(account, status, retry_after=None):
+    """Append one attempt to fetch the usage endpoint to the account's fetch log.
+
+    The endpoint's rate limit is undocumented, so this is the record of what it accepts: the time
+    of every attempt, its HTTP status or the reason no status came back, and any Retry-After.
+    Nothing reads it but a person working out how often a fetch can be made.
+    """
+    row = {"t": time.time(), "status": status}
+    if retry_after is not None:
+        row["retry_after"] = retry_after
+    append_history(account, row, directory="fetches")
+
+
 def prune(account):
-    """Delete session files and history days old enough that nothing reads them any more."""
+    """Delete session files, history days and fetch-log days old enough to be of no more use."""
     now = time.time()
     for directory, keep in (
         (state_dir("sessions"), KEEP_SESSIONS),
         (state_dir("accounts", account, "history"), KEEP_HISTORY),
+        (state_dir("accounts", account, "fetches"), KEEP_HISTORY),
     ):
         try:
             names = os.listdir(directory)

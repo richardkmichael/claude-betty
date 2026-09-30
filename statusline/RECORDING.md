@@ -14,6 +14,7 @@ sessions/<session_id>.json                         one session's latest reading
 accounts/<account_uuid>/usage.json                 the usage endpoint's last answer
 accounts/<account_uuid>/fetch.lock                 when a fetch was last attempted (its mtime)
 accounts/<account_uuid>/history/<YYYY-MM-DD>.jsonl readings that moved, one file per UTC day
+accounts/<account_uuid>/fetches/<YYYY-MM-DD>.jsonl every usage-endpoint fetch attempted
 ```
 
 Every file is written atomically or appended a line at a time, so a reader never sees half a write.
@@ -67,6 +68,14 @@ not move or nothing was drawing the line. The session file's `rendered_at` tells
 Several sessions on one account each write their own rows, so the same reading can appear more than
 once.
 
+## accounts/<account_uuid>/fetches/*.jsonl
+
+One line per attempt to fetch the usage endpoint: `t`, `status`, and `retry_after` when the
+response carried one. `status` is the HTTP status, or `no_token`, `discarded` (the login changed
+while the request was in flight), or the name of the exception that stopped the request. The
+endpoint's rate limit is not documented, and this log is the record of what it accepts. The MCP
+server does not read it.
+
 ## Trusting a reading
 
 A session's `rate_limits` is the last API response's, repeated on every render until the next one
@@ -80,5 +89,5 @@ arrives. It is the current login's reading when all of these hold:
 
 ## Retention
 
-Session files are deleted seven days after their last write, and history files nine days after
-their last append. The fetch that runs about once a minute does the pruning.
+Session files are deleted seven days after their last write, and history and fetch-log files nine
+days after their last append. The fetch that runs about once a minute does the pruning.
