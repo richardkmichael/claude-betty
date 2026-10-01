@@ -106,6 +106,17 @@ stand in for `statusline.py`. The server validates what it reads, and when a fil
 returns an error naming the schema. `uv run --script server.py --write-schemas` regenerates the
 schemas from the models in `server.py`.
 
+## Tests
+
+From the repository root:
+
+```
+uv run --with pytest --with "mcp>=2.2,<3" --with jsonschema pytest mcp/quota/tests
+```
+
+They include a contract test that runs `statusline.py` to write a recording, checks it against the
+schemas, and reads it back through the server.
+
 ## Why the hook
 
 The tool publishes no parameters, yet the server has to know which session is asking so that it
