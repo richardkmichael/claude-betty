@@ -37,6 +37,13 @@ An answer for an account under heavy load, abridged:
   },
   "models": {
     "Fable": { "...": "the same fields", "fetched_seconds_ago": 21 }
+  },
+  "context": {
+    "agent": "main",
+    "model": "claude-opus-5-5",
+    "used_tokens": 128320,
+    "window_tokens": 1000000,
+    "compacts_at_tokens": 735000
   }
 }
 ```
@@ -46,6 +53,9 @@ An answer for an account under heavy load, abridged:
   so the 2-minute rate moves in steps of half a point a minute.
 - `measured_minutes` appears only for a span that reaches back past the start of the window or of
   the recording.
+- `context` is the calling conversation's own. For a subagent it is read from the subagent's
+  transcript and has no window size, which the transcript does not record. It is left out when it
+  cannot be read.
 - The answer is MCP structured content, with an `outputSchema` describing every field.
 
 When it cannot vouch for the data, the tool returns an error that says why and what to do: nothing
@@ -129,6 +139,6 @@ returns is merged into the call's arguments before the call is sent. So `hook.py
 `session_id` to every `get-quota` call, and the server parses it from the raw arguments against a
 private allow-list. The model sees a tool with no inputs, and has nothing to fill in or get wrong.
 A call from a subagent carries the parent session's ID, which is the session whose status line is
-recorded.
+recorded, and the subagent's `agent_id`, by which the server finds the subagent's transcript.
 
 Without the hook, every call fails with an error that names it.

@@ -1,6 +1,44 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$defs": {
+    "ContextReading": {
+      "additionalProperties": true,
+      "properties": {
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model"
+        },
+        "used_tokens": {
+          "description": "Tokens in context as of the last API response",
+          "title": "Used Tokens",
+          "type": "integer"
+        },
+        "window_tokens": {
+          "title": "Window Tokens",
+          "type": "integer"
+        },
+        "compacts_at_tokens": {
+          "description": "Where auto-compaction fires",
+          "title": "Compacts At Tokens",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "used_tokens",
+        "window_tokens",
+        "compacts_at_tokens"
+      ],
+      "title": "ContextReading",
+      "type": "object"
+    },
     "PlanReading": {
       "additionalProperties": true,
       "properties": {
@@ -100,6 +138,31 @@
         }
       ],
       "title": "Rate Limits"
+    },
+    "transcript_path": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The main conversation's",
+      "title": "Transcript Path"
+    },
+    "context": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ContextReading"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The main conversation's context; null before a response"
     }
   },
   "required": [

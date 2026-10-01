@@ -142,6 +142,14 @@ class PlanReading(BaseModel):
     resets_at: float = Field(description="Epoch seconds")
 
 
+class ContextReading(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    model: str | None = None
+    used_tokens: int = Field(description="Tokens in context as of the last API response")
+    window_tokens: int
+    compacts_at_tokens: int = Field(description="Where auto-compaction fires")
+
+
 class SessionRecord(BaseModel):
     """sessions/<session_id>.json: one session's latest reading, rewritten on every render."""
 
@@ -156,6 +164,10 @@ class SessionRecord(BaseModel):
     )
     matches_login: bool = Field(description="Whether rate_limits is account_uuid's own reading")
     rate_limits: dict[Literal["five_hour", "seven_day"], PlanReading] | None
+    transcript_path: str | None = Field(default=None, description="The main conversation's")
+    context: ContextReading | None = Field(
+        default=None, description="The main conversation's context; null before a response"
+    )
 
 
 class UsageLimit(BaseModel):
@@ -262,6 +274,16 @@ class Window(OmitUnset):
     )
 
 
+class ContextUse(OmitUnset):
+    agent: Literal["main", "subagent"] = Field(description="Whose context this is: the caller's")
+    model: str | None = None
+    used_tokens: int
+    window_tokens: int | None = Field(default=None, description="Main conversation only")
+    compacts_at_tokens: int | None = Field(
+        default=None, description="Main conversation only: where auto-compaction fires"
+    )
+
+
 class Quota(OmitUnset):
     """What get-quota returns. The SDK derives the tool's outputSchema from this."""
 
@@ -271,6 +293,7 @@ class Quota(OmitUnset):
     exhaustion_at_last_2_min_rate: dict[str, Exhaustion]
     plan: dict[str, Window]
     models: dict[str, Window] | None = None
+    context: ContextUse | None = None
     note: str | None = None
 
 
@@ -279,6 +302,9 @@ class InjectedArgs(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
     session_id: UUID
+    # A subagent's call only. The pattern keeps it to a file-name component, since it names the
+    # subagent's transcript.
+    agent_id: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_-]+$")
 
 
 def injected_args(ctx: Context) -> InjectedArgs:
@@ -300,8 +326,9 @@ def injected_args(ctx: Context) -> InjectedArgs:
         return InjectedArgs.model_validate(arguments)
     except ValidationError:
         raise ToolError(
-            f"get-quota received session_id {arguments['session_id']!r}, which is not a session "
-            "ID. Its PreToolUse hook (hook.py) sets it; nothing else should."
+            f"get-quota received session_id {arguments['session_id']!r} and agent_id "
+            f"{arguments.get('agent_id')!r}, which are not a session ID and an agent ID. Its "
+            "PreToolUse hook (hook.py) sets them; nothing else should."
         ) from None
 
 
@@ -465,6 +492,50 @@ def exhaustion(windows):
     return forecast
 
 
+def subagent_context(transcript_path, session_id, agent_id):
+    """A subagent's context as of its last API response, from its own transcript, or None.
+
+    The tool call being answered was written to the transcript before it ran, with the usage of
+    the response that made it, so the last assistant record is current. Only the tail is read.
+    """
+    if not transcript_path:
+        return None
+    path = os.path.join(
+        os.path.dirname(transcript_path), session_id, "subagents", f"agent-{agent_id}.jsonl"
+    )
+    try:
+        with open(path, "rb") as f:
+            f.seek(max(0, os.path.getsize(path) - 256 * 1024))
+            lines = f.read().decode(errors="replace").splitlines()
+    except OSError:
+        return None
+    for line in reversed(lines):
+        try:
+            message = json.loads(line).get("message") or {}
+        except (ValueError, AttributeError):
+            continue  # the first line, cut short by the seek, or not an object
+        usage = message.get("usage") if isinstance(message, dict) else None
+        if not usage or message.get("model") == "<synthetic>":
+            continue
+        used = sum(
+            usage.get(key) or 0
+            for key in ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens")
+        )
+        return {"agent": "subagent", "model": message.get("model"), "used_tokens": used}
+    return None
+
+
+def context_report(session, injected):
+    """The caller's context: the main conversation's from the recording, a subagent's from its
+    transcript. Left out when it cannot be read, since a wrong figure would mislead."""
+    if injected.agent_id:
+        return subagent_context(
+            session.get("transcript_path"), str(injected.session_id), injected.agent_id
+        )
+    reading = session.get("context")
+    return {"agent": "main", **reading} if reading else None
+
+
 def plan_report(session, rows, now):
     """The five-hour and seven-day windows, as of the session's last API response."""
     report = {}
@@ -557,6 +628,7 @@ async def get_quota(ctx: Context) -> Quota:
         "exhaustion_at_last_2_min_rate": exhaustion({**plan, **(models or {})}),
         "plan": plan,
         "models": models,
+        "context": context_report(session, injected),
     }
     if omitted:
         answer["note"] = omitted

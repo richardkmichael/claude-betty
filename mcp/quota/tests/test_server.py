@@ -159,6 +159,7 @@ def answer(server):
         ({"session_id": SESSION}, {"rate_limits": None}, "no quota data yet"),
         ({"session_id": SESSION}, {"response_at": None}, "no quota data yet"),
         ({"session_id": SESSION}, {"matches_login": False}, "not the logged-in account's"),
+        ({"session_id": SESSION, "agent_id": "../x"}, None, "not a session ID and an agent ID"),
         (
             {"session_id": SESSION},
             {"rate_limits": {"five_hour": {"used_percentage": "lots", "resets_at": 1}}},
@@ -220,6 +221,41 @@ def test_history_rows_that_do_not_match_the_schema_are_skipped(server, state):
         f.write(json.dumps({"t": state.now - 30, "source": "payload"}) + "\n")  # no session_id
         f.write('{"t": 1, "source": "pay')  # cut short by a write in progress
     assert answer(server)["plan"]["five_hour"]["percent_per_minute"]["last_2_min"] == 1.0
+
+
+def test_the_main_conversations_context_comes_from_the_recording(server, state):
+    reading = {"used_tokens": 1000, "window_tokens": 200000, "compacts_at_tokens": 167000}
+    state.session(context={"model": "claude-opus-5-5", **reading})
+    assert answer(server)["context"] == {"agent": "main", "model": "claude-opus-5-5", **reading}
+
+
+def test_a_subagents_context_comes_from_its_own_transcript(server, state, tmp_path):
+    transcript = tmp_path / "project" / f"{SESSION}.jsonl"
+    state.session(
+        transcript_path=str(transcript),
+        context={"used_tokens": 1000, "window_tokens": 200000, "compacts_at_tokens": 167000},
+    )
+    usage = {
+        "input_tokens": 3,
+        "cache_read_input_tokens": 20000,
+        "cache_creation_input_tokens": 500,
+    }
+    records = [
+        {"type": "assistant", "message": {"model": "claude-haiku-4-5", "usage": usage}},
+        {"type": "assistant", "message": {"model": "<synthetic>", "usage": {"input_tokens": 0}}},
+        {"type": "user", "message": {"content": "tool result"}},
+    ]
+    path = transcript.parent / SESSION / "subagents" / "agent-a1.jsonl"
+    path.parent.mkdir(parents=True)
+    path.write_text("".join(json.dumps(r) + "\n" for r in records))
+    result = call(server, {"session_id": SESSION, "agent_id": "a1"}).structured_content
+    assert result["context"] == {
+        "agent": "subagent",
+        "model": "claude-haiku-4-5",
+        "used_tokens": 20503,
+    }
+    result = call(server, {"session_id": SESSION, "agent_id": "a2"}).structured_content
+    assert "context" not in result  # no transcript: left out, never the main conversation's
 
 
 def test_the_answer_is_structured_content_with_a_matching_text_block(server):
@@ -284,7 +320,11 @@ def test_what_statusline_writes_matches_the_schemas_and_the_server_reads_it(tmp_
         payload = {
             "session_id": SESSION,
             "cost": {"total_cost_usd": cost},
-            "context_window": {"total_input_tokens": int(cost * 1000), "total_output_tokens": 1},
+            "context_window": {
+                "total_input_tokens": int(cost * 1000),
+                "total_output_tokens": 1,
+                "context_window_size": 200000,
+            },
             "rate_limits": {
                 "five_hour": {"used_percentage": five, "resets_at": int(time.time() + 3600)},
                 "seven_day": {"used_percentage": 10, "resets_at": seven_day_reset},
@@ -315,3 +355,4 @@ def test_what_statusline_writes_matches_the_schemas_and_the_server_reads_it(tmp_
 
     result = answer(load())
     assert result["plan"]["five_hour"]["used_percent"] == 22
+    assert result["context"]["used_tokens"] == 1000
