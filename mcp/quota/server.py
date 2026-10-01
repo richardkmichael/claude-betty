@@ -336,7 +336,7 @@ def injected_args(ctx: Context) -> InjectedArgs:
         ) from None
 
 
-async def current_session(session_id):
+async def current_session(session_id, wait=None):
     """The session's recording, once the render of the response that made this call has landed.
 
     The response that issued this call triggers a render a few hundred milliseconds after it
@@ -345,7 +345,7 @@ async def current_session(session_id):
     """
     path = state_dir("sessions", f"{session_id}.json")
     called = time.time()
-    deadline = called + RENDER_WAIT
+    deadline = called + (RENDER_WAIT if wait is None else wait)
     session = read_json(path)
     while session.get("rendered_at", 0) < called and time.time() < deadline:
         await asyncio.sleep(0.1)
@@ -653,8 +653,12 @@ def model_report(account, rows):
     annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False),
 )
 async def get_quota(ctx: Context) -> Quota:
-    injected = injected_args(ctx)
-    session = await current_session(injected.session_id)
+    return await quota(injected_args(ctx))
+
+
+async def quota(injected, wait=None):
+    """The answer for the session and agent named by injected; ToolError when it cannot be given."""
+    session = await current_session(injected.session_id, wait)
     check(session)
     now = time.time()
     account = session["account_uuid"]
@@ -678,8 +682,26 @@ async def get_quota(ctx: Context) -> Quota:
     return Quota.model_validate(answer)
 
 
+def print_answer(session_id, agent_id=None):
+    """Print the answer get-quota would give the session or subagent, for notice.py to pass on.
+
+    Exit status 1, with the refusal printed, when the tool would refuse. No render is waited for:
+    the hook runs after the response it follows was drawn.
+    """
+    try:
+        injected = InjectedArgs(session_id=session_id, agent_id=agent_id)
+        answer = asyncio.run(quota(injected, wait=0))
+    except (ToolError, ValidationError) as exc:
+        print(exc)
+        return 1
+    print(answer.model_dump_json())
+    return 0
+
+
 if __name__ == "__main__":
     if sys.argv[1:2] == ["--write-schemas"]:
         write_schemas(os.path.join(os.path.dirname(os.path.abspath(__file__)), "schemas"))
+    elif sys.argv[1:2] == ["--answer"] and len(sys.argv) in (3, 4):
+        sys.exit(print_answer(*sys.argv[2:]))
     else:
         app.run()

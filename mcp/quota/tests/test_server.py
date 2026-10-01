@@ -282,6 +282,13 @@ def test_a_subagents_context_comes_from_its_own_transcript(server, state, tmp_pa
     assert "context" not in result  # no transcript: left out, never the main conversation's
 
 
+def test_answer_mode_prints_the_answer_or_the_refusal(server, capsys):
+    assert server.print_answer(SESSION) == 0
+    assert json.loads(capsys.readouterr().out)["plan"]["five_hour"]["used_percent"] == 30
+    assert server.print_answer("bbbbbbbb-0000-4000-8000-000000000002") == 1
+    assert "No quota recording" in capsys.readouterr().out
+
+
 def test_the_answer_is_structured_content_with_a_matching_text_block(server):
     async def run():
         async with Client(server.app) as client:
