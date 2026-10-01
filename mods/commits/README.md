@@ -110,8 +110,10 @@ chord to the pane drawn last.
 
     CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude --plugin-dir mods/commits
     claude plugin validate mods/commits
-    CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude plugin test mods/commits
+    claude plugin test mods/commits
+    npx -y -p typescript@5 tsc -p mods/commits --noUnusedLocals
 
-Types come from `/plugin-types`, run in `mods/`, which writes
-`mods/.claude/types/`; `mods/tsconfig.json` includes them. Every `$` call
-the mod makes is in `hooks/register.ts`, bound at `session.start`.
+The engine writes the types, and a `tsconfig.json` extending them, beside
+the mod each time a session loads it; load it once before type-checking a
+fresh clone. Every `$` call the mod makes is in `hooks/register.ts`, bound
+at `session.start`.
