@@ -1,0 +1,183 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "EndpointRow": {
+      "additionalProperties": true,
+      "properties": {
+        "t": {
+          "description": "Epoch seconds",
+          "title": "T",
+          "type": "number"
+        },
+        "source": {
+          "const": "endpoint",
+          "title": "Source",
+          "type": "string"
+        },
+        "limits": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/UsageLimit"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Limits"
+        }
+      },
+      "required": [
+        "t",
+        "source"
+      ],
+      "title": "EndpointRow",
+      "type": "object"
+    },
+    "PayloadRow": {
+      "additionalProperties": true,
+      "properties": {
+        "t": {
+          "description": "Epoch seconds",
+          "title": "T",
+          "type": "number"
+        },
+        "source": {
+          "const": "payload",
+          "title": "Source",
+          "type": "string"
+        },
+        "session_id": {
+          "title": "Session Id",
+          "type": "string"
+        },
+        "five_hour": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PlanReading"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "seven_day": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PlanReading"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "t",
+        "source",
+        "session_id"
+      ],
+      "title": "PayloadRow",
+      "type": "object"
+    },
+    "PlanReading": {
+      "additionalProperties": true,
+      "properties": {
+        "used_percentage": {
+          "title": "Used Percentage",
+          "type": "number"
+        },
+        "resets_at": {
+          "description": "Epoch seconds",
+          "title": "Resets At",
+          "type": "number"
+        }
+      },
+      "required": [
+        "used_percentage",
+        "resets_at"
+      ],
+      "title": "PlanReading",
+      "type": "object"
+    },
+    "UsageLimit": {
+      "additionalProperties": true,
+      "properties": {
+        "kind": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Kind"
+        },
+        "percent": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Percent"
+        },
+        "resets_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "ISO 8601",
+          "title": "Resets At"
+        },
+        "scope": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "scope.model.display_name names a model",
+          "title": "Scope"
+        }
+      },
+      "title": "UsageLimit",
+      "type": "object"
+    }
+  },
+  "discriminator": {
+    "mapping": {
+      "endpoint": "#/$defs/EndpointRow",
+      "payload": "#/$defs/PayloadRow"
+    },
+    "propertyName": "source"
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/PayloadRow"
+    },
+    {
+      "$ref": "#/$defs/EndpointRow"
+    }
+  ],
+  "title": "Quota recording: history-row"
+}

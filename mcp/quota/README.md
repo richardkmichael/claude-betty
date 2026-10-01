@@ -48,10 +48,10 @@ An answer for an account under heavy load, abridged:
   the recording.
 - The answer is MCP structured content, with an `outputSchema` describing every field.
 
-When it cannot vouch for a figure, the tool returns an error that says why and what to do: the
-status line is not recording, its recording has gone stale, no quota data has arrived since the
-session started or since `/login`, or the data is still the previous login's. Per-model figures
-older than five minutes are left out with a note, as the status line shows `STL` for them.
+When it cannot vouch for the data, the tool returns an error that says why and what to do: nothing
+is recording, the recording has gone stale or does not match its schema, no quota data has arrived
+since the session started or since `/login`, or the data is still the previous login's. Per-model
+data older than five minutes is left out with a note, as the status line shows `STL` for it.
 
 ## How the model is told to use it
 
@@ -65,9 +65,9 @@ changed instructions when its server reconnects.
 
 ## Requirements
 
-- `statusline.py` running as the status line command, either drawing the line or with
-  `--record-only` to keep Claude Code's own footer. See the status line section of the top-level
-  README.
+- A recorder: normally `statusline.py` running as the status line command, either drawing the
+  line or with `--record-only` to keep Claude Code's own footer. See the status line section of
+  the top-level README, and "Other recorders" below.
 - `uv`, which runs `server.py` with its one dependency, the MCP Python SDK.
 - The `PreToolUse` hook in `hook.py`, which passes the calling session's ID to the tool.
 
@@ -97,6 +97,14 @@ Add the hook to `~/.claude/settings.json`, with the path to your checkout:
 Setting `statusLine.refreshInterval` is recommended. The status line is otherwise drawn only when
 something in the session changes, and a call made while it has not been drawn for a minute, such
 as one from a long-running subagent, is refused as stale.
+
+## Other recorders
+
+The server reads the files defined by the JSON Schemas in `schemas/`, from the directory named by
+`CLAUDE_QUOTA_STATE`, or `~/.local/state/claude-quota` by default. Any tool that writes them can
+stand in for `statusline.py`. The server validates what it reads, and when a file does not match,
+returns an error naming the schema. `uv run --script server.py --write-schemas` regenerates the
+schemas from the models in `server.py`.
 
 ## Why the hook
 

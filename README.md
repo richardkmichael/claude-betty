@@ -166,8 +166,9 @@ kept under `~/.local/state/claude-quota/`, one directory per account. A value to
 reads `STL` in place of the percentage rather than quietly showing a stale number. This is the only
 part of the script that reaches beyond reading a file.
 
-Every render also records the figures it read under the same directory, for the `quota` MCP server
-to answer from. `statusline/RECORDING.md` describes the layout. To keep the recording without
+Status line rendering also records quota data under the same directory, which the `quota` MCP
+server reads. `mcp/quota/schemas/` defines the files, and `statusline/RECORDING.md` describes how
+they are written. To keep the recording without
 drawing a line, and so keep Claude Code's own footer, run it with `--record-only`: it prints
 nothing and exits 0, which Claude Code treats the same as having no status line.
 

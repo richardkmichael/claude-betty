@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "PlanReading": {
+      "additionalProperties": true,
+      "properties": {
+        "used_percentage": {
+          "title": "Used Percentage",
+          "type": "number"
+        },
+        "resets_at": {
+          "description": "Epoch seconds",
+          "title": "Resets At",
+          "type": "number"
+        }
+      },
+      "required": [
+        "used_percentage",
+        "resets_at"
+      ],
+      "title": "PlanReading",
+      "type": "object"
+    }
+  },
+  "additionalProperties": true,
+  "description": "sessions/<session_id>.json: one session's latest reading, rewritten on every render.",
+  "properties": {
+    "schema": {
+      "const": 1,
+      "title": "Schema",
+      "type": "integer"
+    },
+    "session_id": {
+      "title": "Session Id",
+      "type": "string"
+    },
+    "account_uuid": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "The login at this render",
+      "title": "Account Uuid"
+    },
+    "account_label": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The account name to show",
+      "title": "Account Label"
+    },
+    "rendered_at": {
+      "description": "Epoch seconds of this render",
+      "title": "Rendered At",
+      "type": "number"
+    },
+    "response_at": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Epoch seconds of the render that first showed the latest API response",
+      "title": "Response At"
+    },
+    "matches_login": {
+      "description": "Whether rate_limits is account_uuid's own reading",
+      "title": "Matches Login",
+      "type": "boolean"
+    },
+    "rate_limits": {
+      "anyOf": [
+        {
+          "additionalProperties": {
+            "$ref": "#/$defs/PlanReading"
+          },
+          "propertyNames": {
+            "enum": [
+              "five_hour",
+              "seven_day"
+            ]
+          },
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Rate Limits"
+    }
+  },
+  "required": [
+    "schema",
+    "session_id",
+    "account_uuid",
+    "rendered_at",
+    "response_at",
+    "matches_login",
+    "rate_limits"
+  ],
+  "title": "Quota recording: session",
+  "type": "object"
+}

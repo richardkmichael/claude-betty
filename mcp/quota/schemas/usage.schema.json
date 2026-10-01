@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "UsageAnswer": {
+      "additionalProperties": true,
+      "properties": {
+        "limits": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/UsageLimit"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Limits"
+        }
+      },
+      "title": "UsageAnswer",
+      "type": "object"
+    },
+    "UsageLimit": {
+      "additionalProperties": true,
+      "properties": {
+        "kind": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Kind"
+        },
+        "percent": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Percent"
+        },
+        "resets_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "ISO 8601",
+          "title": "Resets At"
+        },
+        "scope": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "scope.model.display_name names a model",
+          "title": "Scope"
+        }
+      },
+      "title": "UsageLimit",
+      "type": "object"
+    }
+  },
+  "additionalProperties": true,
+  "description": "accounts/<account_uuid>/usage.json: the usage endpoint's last answer for the account.",
+  "properties": {
+    "fetched_at": {
+      "description": "Epoch seconds",
+      "title": "Fetched At",
+      "type": "number"
+    },
+    "usage": {
+      "$ref": "#/$defs/UsageAnswer",
+      "description": "The endpoint's answer, verbatim"
+    }
+  },
+  "required": [
+    "fetched_at",
+    "usage"
+  ],
+  "title": "Quota recording: usage",
+  "type": "object"
+}

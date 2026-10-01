@@ -31,15 +31,24 @@ import datetime
 import glob
 import json
 import os
+import sys
 import time
+from typing import Annotated, Literal
 from uuid import UUID
 
 from mcp.server.mcpserver import Context, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ToolAnnotations
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_serializer
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    TypeAdapter,
+    ValidationError,
+    model_serializer,
+)
 
-RECORD_SCHEMA = 1  # the statusline.py recording layout this reads
+RECORD_SCHEMA = 1  # the recording layout this reads; see schemas/ and statusline/RECORDING.md
 FRESH = 60  # a session drawn this recently is still being recorded
 RENDER_WAIT = 1.0  # seconds to wait for the render of the response that made this call
 USAGE_STALE_AFTER = 300  # per-model quota data older than this is left out rather than reported
@@ -118,6 +127,101 @@ def iso_epoch(s):
         return datetime.datetime.fromisoformat(s.replace("Z", "+00:00")).timestamp()
     except (AttributeError, ValueError):
         return 0
+
+
+# ── what this server reads ────────────────────────────────────────────────────
+#
+# The recording's schema, written as the models it is validated against. `server.py
+# --write-schemas` publishes them as JSON Schema under schemas/, so that a recorder other than
+# statusline.py can write the same files. Fields a recorder keeps for itself are allowed through.
+
+
+class PlanReading(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    used_percentage: float
+    resets_at: float = Field(description="Epoch seconds")
+
+
+class SessionRecord(BaseModel):
+    """sessions/<session_id>.json: one session's latest reading, rewritten on every render."""
+
+    model_config = ConfigDict(extra="allow", title="Quota recording: session")
+    schema_version: Literal[1] = Field(alias="schema")
+    session_id: str
+    account_uuid: str | None = Field(description="The login at this render")
+    account_label: str | None = Field(default=None, description="The account name to show")
+    rendered_at: float = Field(description="Epoch seconds of this render")
+    response_at: float | None = Field(
+        description="Epoch seconds of the render that first showed the latest API response"
+    )
+    matches_login: bool = Field(description="Whether rate_limits is account_uuid's own reading")
+    rate_limits: dict[Literal["five_hour", "seven_day"], PlanReading] | None
+
+
+class UsageLimit(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    kind: str | None = None
+    percent: float | None = None
+    resets_at: str | None = Field(default=None, description="ISO 8601")
+    scope: dict | None = Field(default=None, description="scope.model.display_name names a model")
+
+
+class UsageAnswer(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    limits: list[UsageLimit] | None = None
+
+
+class UsageRecord(BaseModel):
+    """accounts/<account_uuid>/usage.json: the usage endpoint's last answer for the account."""
+
+    model_config = ConfigDict(extra="allow", title="Quota recording: usage")
+    fetched_at: float = Field(description="Epoch seconds")
+    usage: UsageAnswer = Field(description="The endpoint's answer, verbatim")
+
+
+class PayloadRow(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    t: float = Field(description="Epoch seconds")
+    source: Literal["payload"]
+    session_id: str
+    five_hour: PlanReading | None = None
+    seven_day: PlanReading | None = None
+
+
+class EndpointRow(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    t: float = Field(description="Epoch seconds")
+    source: Literal["endpoint"]
+    limits: list[UsageLimit] | None = None
+
+
+HistoryRow = TypeAdapter(Annotated[PayloadRow | EndpointRow, Field(discriminator="source")])
+
+
+def schema_errors(exc):
+    """A ValidationError's first few problems, as one line."""
+    return "; ".join(
+        f"{'.'.join(str(part) for part in error['loc'])}: {error['msg']}"
+        for error in exc.errors()[:3]
+    )
+
+
+def write_schemas(directory):
+    """Publish the recording models as JSON Schema files in directory."""
+    os.makedirs(directory, exist_ok=True)
+    for name, schema in (
+        ("session", SessionRecord.model_json_schema(by_alias=True)),
+        ("usage", UsageRecord.model_json_schema(by_alias=True)),
+        ("history-row", HistoryRow.json_schema(by_alias=True)),
+    ):
+        schema = {"$schema": "https://json-schema.org/draft/2020-12/schema", **schema}
+        schema.setdefault("title", f"Quota recording: {name}")
+        with open(os.path.join(directory, f"{name}.schema.json"), "w") as f:
+            json.dump(schema, f, indent=2)
+            f.write("\n")
+
+
+# ── what this server returns ──────────────────────────────────────────────────
 
 
 class OmitUnset(BaseModel):
@@ -222,20 +326,27 @@ def check(session):
     """Raise ToolError unless the session's plan reading can be vouched for; see RECORDING.md."""
     if not session:
         raise ToolError(
-            "No status line recording exists for this session. get-quota reads what statusline.py "
-            "records, so the statusLine command must run statusline.py, or statusline.py "
-            "--record-only to keep Claude Code's own footer. See mcp/quota/README.md."
+            "No quota recording exists for this session. get-quota reads what a recorder writes, "
+            "normally statusline.py as the statusLine command, or statusline.py --record-only to "
+            "keep Claude Code's own footer. See mcp/quota/README.md."
         )
     if session.get("schema") != RECORD_SCHEMA:
         raise ToolError(
-            f"The status line recording has schema {session.get('schema')!r}, and this server "
+            f"This session's quota recording has schema {session.get('schema')!r}, and this server "
             f"reads schema {RECORD_SCHEMA}. Update whichever of the two is older."
         )
+    try:
+        SessionRecord.model_validate(session)
+    except ValidationError as exc:
+        raise ToolError(
+            "This session's recording does not match mcp/quota/schemas/session.schema.json: "
+            + schema_errors(exc)
+        ) from None
     age = time.time() - (session.get("rendered_at") or 0)
     if age > FRESH:
         raise ToolError(
-            f"The status line last recorded this session {age:.0f} seconds ago, so its figures "
-            "cannot be vouched for. It is recorded whenever the line is drawn; setting "
+            f"This session's quota recording was last written {age:.0f} seconds ago, so its data "
+            "cannot be vouched for. statusline.py writes it whenever the line is drawn; setting "
             "statusLine.refreshInterval keeps it drawn while nothing else changes."
         )
     if not session.get("rate_limits") or session.get("response_at") is None:
@@ -270,8 +381,11 @@ def history(account):
                         row = json.loads(line)
                     except ValueError:
                         continue  # a line cut short by a write in progress
-                    if isinstance(row, dict) and isinstance(row.get("t"), (int, float)):
-                        rows.append(row)
+                    try:
+                        HistoryRow.validate_python(row)
+                    except ValidationError:
+                        continue
+                    rows.append(row)
         except OSError:
             continue
     return sorted(rows, key=lambda r: r["t"])
@@ -373,6 +487,14 @@ def model_report(account, rows):
     line shows STL in their place.
     """
     recorded = read_json(state_dir("accounts", account, "usage.json"))
+    try:
+        UsageRecord.model_validate(recorded)
+    except ValidationError as exc:
+        if recorded:
+            return None, (
+                "Per-model quota data is left out: usage.json does not match "
+                "mcp/quota/schemas/usage.schema.json: " + schema_errors(exc)
+            )
     fetched_at = recorded.get("fetched_at") or 0
     age = time.time() - fetched_at
     if age > USAGE_STALE_AFTER:
@@ -442,4 +564,7 @@ async def get_quota(ctx: Context) -> Quota:
 
 
 if __name__ == "__main__":
-    app.run()
+    if sys.argv[1:2] == ["--write-schemas"]:
+        write_schemas(os.path.join(os.path.dirname(os.path.abspath(__file__)), "schemas"))
+    else:
+        app.run()

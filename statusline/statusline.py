@@ -56,11 +56,11 @@ confined to refresh_usage and fetch_usage below. A fetch is started only when th
 rate_limits, which is what says the account has plan limits worth fetching. A figure too old to
 trust is still shown, reading STL in place of the percentage, rather than hidden.
 
-Every render also records what the payload reported, under the same state directory: the session's
-latest reading, rewritten each time, and a per-account history appended to only when a new API
-response moves a figure. The quota MCP server reads both, so that it answers with the figures this
-line shows and can say how fast they are moving. RECORDING.md beside this script describes the
-layout. A recording that fails never costs the line.
+Every render also records quota data under the same state directory, for the quota MCP server: the
+session's latest reading, rewritten each time, and a per-account history appended to only when a
+new API response moves a percentage. The schemas in mcp/quota/schemas/ define the files, and
+RECORDING.md beside this script describes how they are written. A recording that fails never costs
+the line.
 
 Available data: https://code.claude.com/docs/en/statusline#available-data
 Note that `cost` and `exceeds_200k_tokens` are present in the payload but absent from the
@@ -449,9 +449,9 @@ def limits_moved(before, after):
 
 # ── recording ─────────────────────────────────────────────────────────────────
 #
-# Every render records what the payload reported, so that the quota MCP server can answer with the
-# figures this line shows, and work out how fast they are moving. RECORDING.md beside this script
-# describes the layout; it is a contract with that server.
+# Every render records quota data for the quota MCP server, which reports what this line shows and
+# how fast it is moving. The schemas in mcp/quota/schemas/ define the files; RECORDING.md beside
+# this script describes how they are written.
 
 RECORD_SCHEMA = 1
 KEEP_SESSIONS = 7 * 86400  # a session file untouched for this long is deleted
