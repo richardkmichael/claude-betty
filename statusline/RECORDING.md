@@ -29,6 +29,11 @@ counts it compares between renders to detect a new API response. The server igno
 
 `response_at` is `null` until the session's first response after its file was created.
 
+`context` is the main conversation's context as of the last response: the tokens in it, the window
+size, and where auto-compaction fires, the same values the ctx gauge is drawn from. It is `null`
+before the first response. `transcript_path` is the main conversation's transcript, where the
+server finds a subagent's transcript to read its context.
+
 `matches_login` is true when the reading's `seven_day.resets_at` is within a minute of the seven-day
 reset in `account_uuid`'s `usage.json`. The payload names no account, and after `/login` a session
 can go on reporting the previous account's quota for several responses. The seven-day reset is

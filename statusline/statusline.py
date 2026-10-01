@@ -550,11 +550,31 @@ def record(data, cfg):
         "matches_login": owned,
         "marker": marker,
         "rate_limits": windows,
+        "transcript_path": data.get("transcript_path"),
+        "context": context_reading(data),
     }
     write_json(path, current)
     moved = windows != previous.get("rate_limits")
     if responded and owned and (moved or not previous.get("matches_login")):
         append_history(account, {"t": now, "source": "payload", "session_id": session, **windows})
+
+
+def context_reading(data):
+    """The main conversation's context as of its last API response, or None before the first one.
+
+    The same figures the ctx gauge is drawn from, so the quota server can report them. A
+    subagent's context is not in the payload; the server reads that from the subagent's transcript.
+    """
+    cw = data.get("context_window") or {}
+    used, size = cw.get("total_input_tokens"), cw.get("context_window_size")
+    if not used or not size:
+        return None
+    return {
+        "model": (data.get("model") or {}).get("id"),
+        "used_tokens": used,
+        "window_tokens": size,
+        "compacts_at_tokens": compact_threshold(size)[0],
+    }
 
 
 def login_owns(account, windows):
