@@ -69,6 +69,16 @@ export type PaneActions = {
 }
 
 /**
+ * The keys of the header's Buttons that only carry a key or a chord: none is
+ * drawn, so the ring is moved past any of them it lands on.
+ */
+export const CARRIER_KEYS: readonly string[] = [
+  'ask',
+  'list-up',
+  'list-down',
+]
+
+/**
  * One row of the content under the pinned list: its text and how it is
  * drawn. Every row is one terminal row, truncated, so the window's arithmetic
  * holds.
@@ -477,16 +487,25 @@ function headerRow(
       </Text>
       <Box flexDirection="row" paddingRight={2}>
         {selected ? (
-          <Button
-            key="ask"
-            plain
-            dimColor
-            hotkey={ASK_HOTKEY}
-            onPress={() => actions.toggleAsk(selected.sha)}
-          >
-            {ASK_LABEL}
-          </Button>
+          <Text dimColor wrap="truncate-end">
+            {`${ASK_HOTKEY}: ${ASK_LABEL}`}
+          </Text>
         ) : null}
+        {/* Only a Button's hotkey reaches the pane, and a plain one is drawn
+            as `a: label`, so the Buttons carrying keys are hidden and their
+            help is Text. */}
+        <Box display="none">
+          {selected ? (
+            <Button
+              key="ask"
+              plain
+              hotkey={ASK_HOTKEY}
+              onPress={() => actions.toggleAsk(selected.sha)}
+            >
+              {''}
+            </Button>
+          ) : null}
+        </Box>
         <Button
           key="list-up"
           plain

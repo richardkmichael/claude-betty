@@ -25,10 +25,10 @@ tool answers Claude directly. A subagent's call is refused.
 
 ## In the pane
 
-The header names the range and the count, and on its right carries the ask
-button for the selected commit. One row per commit
-follows, then the selected commit's message and diff in a bordered window
-that scrolls under the pinned rows.
+The header names the range and the count, with the key help in the middle
+and `a: ask about commit` on its right. One row per commit follows, then the
+selected commit's message and diff in a bordered window that scrolls under
+the pinned rows.
 
 The pane opens holding the keyboard, with the focus ring on the selected
 row. `ctrl+x tab` gives a pane the keys later; `ctrl+x x` closes one.
@@ -98,7 +98,7 @@ chord to the pane drawn last.
   the rows are drawn without the region and cannot be dragged over.
 - The terminal's own selection never reaches the mod: a drag in the region is
   the mod's, and copy-on-select does not fire there.
-- No comments typed in the pane yet; the ask button attaches the whole commit.
+- No comments typed in the pane yet; `a` attaches the whole commit.
 - A file's hunks are cut at 10000 characters, the pane's `Code` limit; an
   attached commit is cut at 60000.
 - Nothing is kept across `/clear`, `/resume` or a restart. A fresh load of

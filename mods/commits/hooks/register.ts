@@ -26,6 +26,7 @@ import {
   commitKeyOf,
   commitOfKey,
   contentLinesOf,
+  CARRIER_KEYS,
   paneView,
   windowOf,
   type DiffState,
@@ -771,7 +772,7 @@ export function register(on: On) {
       return next(e)
     }
 
-    const isCarrier = isOwn && (e.element === 'list-up' || e.element === 'list-down')
+    const isCarrier = isOwn && e.element !== undefined && CARRIER_KEYS.includes(e.element)
     const wrap = isCarrier || !isOwn ? wrapTargetOf() : null
 
     if (!wrap) {
