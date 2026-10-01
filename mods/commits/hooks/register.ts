@@ -27,6 +27,7 @@ import {
   clientPropsOf,
   commitKeyOf,
   commitOfKey,
+  contentLinesFor,
   contentLinesOf,
   CARRIER_KEYS,
   paneView,
@@ -143,9 +144,12 @@ export function linesCommitReferenceOf(short: string, range: LineRange): string 
   return commitReferenceTextOf(`${short}:${range.from}-${range.to}`)
 }
 
+/** The mark every commit reference begins with. */
+const REFERENCE_MARK = '⧉'
+
 /** The shape of every commit reference: the mark, then what it names. */
 function commitReferenceTextOf(inner: string): string {
-  return `⧉ ${inner}`
+  return `${REFERENCE_MARK} ${inner}`
 }
 
 /**
@@ -332,6 +336,12 @@ export function register(on: On) {
    */
   let hasPromptBox = true
 
+  /**
+   * Whether the box held a commit reference mark when last read: while it
+   * does, a reference being edited may come back into shape, so edits and
+   * redraws keep syncing even with nothing included.
+   */
+  let hasReferenceMark = false
   let model: PaneModel = EMPTY_MODEL
 
   const loads = new Map<string, Promise<void>>()
@@ -343,6 +353,12 @@ export function register(on: On) {
    * is in the prompt box.
    */
   const included = new Map<string, Included>()
+
+  /**
+   * Commit references the mod excluded and the next sync takes out of the box;
+   * any other reference it does not have, the person may be editing.
+   */
+  const unwritten = new Set<string>()
 
   /** The included ranges of a commit's lines. */
   function linesIncludedOf(sha: string | null): IncludedLines[] {
@@ -366,7 +382,7 @@ export function register(on: On) {
     reset()
 
     if (engine) {
-      await syncBox(engine).catch(() => undefined)
+      await syncBox(engine, 'all').catch(() => undefined)
     }
   }
 
@@ -533,6 +549,7 @@ export function register(on: On) {
 
     for (const entry of linesIncludedOf(sha)) {
       included.delete(entry.key)
+      unwritten.add(entry.commitReference)
     }
 
     included.set(sha, {
@@ -602,6 +619,7 @@ export function register(on: On) {
 
   async function exclude(engine: Host, entry: Included) {
     included.delete(entry.key)
+    unwritten.add(entry.commitReference)
     syncIncluded()
     engine.invalidate()
     await syncBox(engine).catch(() => undefined)
@@ -645,30 +663,41 @@ export function register(on: On) {
    * during an inclusion's own sync cannot append the same commit reference
    * twice.
    */
-  function syncBox(engine: Host): Promise<void> {
-    const run = syncing.then(() => syncBoxNow(engine))
+  function syncBox(engine: Host, strip: 'excluded' | 'all' = 'excluded'): Promise<void> {
+    const run = syncing.then(() => syncBoxNow(engine, strip))
 
     syncing = run.catch(() => undefined)
 
     return run
   }
 
-  async function syncBoxNow(engine: Host) {
+  async function syncBoxNow(engine: Host, strip: 'excluded' | 'all') {
     if (!hasPromptBox) {
       return
     }
 
     const box = await engine.promptRead()
 
+    hasReferenceMark = box.text.includes(REFERENCE_MARK)
     reconcileIncluded(engine, box.text)
 
+    const isReadBack = strip === 'excluded' && readBack(engine, box)
     const commitReferences = new Set([...included.values()].map(entry => entry.commitReference))
-    const kept = box.text.replace(COMMIT_REFERENCE_PATTERN, match =>
-      commitReferences.has(match.trimEnd()) ? match : '',
-    )
+
+    // Only what the mod excluded leaves the box, or everything after a fresh
+    // load or a new session: a reference the person is editing stays.
+    const kept = box.text.replace(COMMIT_REFERENCE_PATTERN, match => {
+      const commitReference = match.trimEnd()
+      const isStripped =
+        !commitReferences.has(commitReference) && (strip === 'all' || unwritten.has(commitReference))
+
+      return isStripped ? '' : match
+    })
     const pending = [...included.values()].filter(entry => !entry.isWritten)
 
-    if (kept === box.text && pending.length === 0) {
+    unwritten.clear()
+
+    if (kept === box.text && pending.length === 0 && !isReadBack) {
       return
     }
 
@@ -778,6 +807,84 @@ export function register(on: On) {
     engine.invalidate()
   }
 
+  /**
+   * Includes what the well-formed commit references in the box name and the
+   * mod does not have: a reference the person edited back into shape, such as
+   * a range changed from `3-6` to `3-7`. One the cursor still stands at the end
+   * of is being typed and waits. One naming a commit not in the listing, a
+   * range of a commit whose diff is not loaded yet (the load syncs again), a
+   * range past its content, or a range of a commit included whole, stays text.
+   *
+   * @returns whether it included anything
+   */
+  function readBack(engine: Host, box: PromptBox): boolean {
+    const written = writtenCommitReferences()
+    let isIncluded = false
+
+    for (const span of referenceSpansIn(box.text)) {
+      const isSettled =
+        written.has(span.commitReference) || unwritten.has(span.commitReference)
+
+      if (isSettled || box.cursor === span.end) {
+        continue
+      }
+
+      const short = box.text.slice(span.start + 2, span.shaEnd)
+      const commit = model.commits.find(candidate => candidate.short === short)
+
+      if (!commit || included.has(commit.sha)) {
+        continue
+      }
+
+      if (span.shaEnd === span.end) {
+        if (linesIncludedOf(commit.sha).length === 0) {
+          includeWritten(engine, commit)
+          isIncluded = true
+        }
+
+        continue
+      }
+
+      if (model.diffs[commit.sha]?.kind !== 'loaded') {
+        void loadDiff(engine, commit.sha).then(() => syncBox(engine).catch(() => undefined))
+
+        continue
+      }
+
+      const [from = NaN, to = NaN] = box.text
+        .slice(span.shaEnd + 1, span.end)
+        .split('-')
+        .map(Number)
+      const lines = contentLinesFor(model, commit.sha)
+
+      if (!(from <= to && to < lines.length)) {
+        continue
+      }
+
+      const range: LineRange = { from, to }
+      const key = `${commit.sha}:${from}-${to}`
+
+      included.set(key, {
+        key,
+        kind: 'lines',
+        sha: commit.sha,
+        short: commit.short,
+        commitReference: span.commitReference,
+        text: linesTextOf(commit, lines.slice(from, to + 1)),
+        isWritten: true,
+        range,
+      })
+      isIncluded = true
+    }
+
+    if (isIncluded) {
+      syncIncluded()
+      engine.invalidate()
+    }
+
+    return isIncluded
+  }
+
   async function closePane(engine: Host) {
     await engine.closePane({ id: Names.PANE_ID })
     isOpen = false
@@ -848,7 +955,7 @@ export function register(on: On) {
       await engine.closePane({ id: Names.PANE_ID })
     }
 
-    await syncBox(engine)
+    await syncBox(engine, 'all')
   }
 
   // A literal, not Names.COMMAND_NAME: the engine's scan reads literal names here to decide which
@@ -1073,7 +1180,7 @@ export function register(on: On) {
 
     // While the composer holds the keys the person may have edited the box,
     // and a commit reference a refused fill left behind can be written now.
-    if (!e.props.isFocused && included.size > 0) {
+    if (!e.props.isFocused && (included.size > 0 || hasReferenceMark)) {
       await syncBox(engine).catch(() => undefined)
     }
 
@@ -1121,12 +1228,16 @@ export function register(on: On) {
   on('prompt.edit', async ($, e, next) => {
     const engine = host
 
-    if (!engine || !hasWritten()) {
+    hasReferenceMark = e.text.includes(REFERENCE_MARK) || e.inputText.includes(REFERENCE_MARK)
+
+    if (!engine || (!hasWritten() && !hasReferenceMark)) {
       return next(e)
     }
 
     const change = referenceEditOf(e, writtenCommitReferences())
-    let box: { text: string; cursor: number; decorations?: PromptDecoration[] }
+    // An edit passed on keeps the runs the hooks beneath painted; one this
+    // hook rewrites has none of theirs.
+    let box: PromptBox & { decorations?: PromptDecoration[] }
 
     if (change === null) {
       box = await next(e)
@@ -1151,15 +1262,16 @@ export function register(on: On) {
     }
 
     reconcileIncluded(engine, box.text)
+    readBack(engine, box)
 
     // Each edit's answer replaces the runs the box paints, so the commit
     // references are painted again on every edit.
-    const written = writtenCommitReferences()
+    const decorations = [
+      ...(box.decorations ?? []),
+      ...commitReferenceDecorationsOf(box.text, writtenCommitReferences()),
+    ]
 
-    return {
-      ...box,
-      decorations: [...(box.decorations ?? []), ...commitReferenceDecorationsOf(box.text, written)],
-    }
+    return { ...box, decorations }
   })
 
   on('prompt.submit', async ($, e, next) => {

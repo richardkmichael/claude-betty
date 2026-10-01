@@ -959,6 +959,46 @@ describe('register', () => {
     expect(gutterOf(4, [{ from: 4, to: 5 }]), 'two lines are both ends').toBe(RANGE_END_MARK)
   })
 
+  test('a range edited back into shape is included again, and one being edited stays', async ($, on) => {
+    const world = await openedWorldOf($, on)
+    const ui = await mountedPaneOf($)
+
+    await dragOver(ui, 9, 10)
+    await world.clock.settle()
+
+    const edit = async (text: string, cursor = text.length) => {
+      world.box.text = text
+      world.box.cursor = cursor
+      await $.ui.render(PANE)
+      await world.clock.settle()
+    }
+    const includedRanges = async () =>
+      /"included":(\[[^\]]*\])/.exec(JSON.stringify(await $.ui.render(PANE)))?.[1]
+
+    await edit('⧉ aaaaaaa:9-')
+
+    expect(world.box.text, 'a half-edited reference stays').toBe('⧉ aaaaaaa:9-')
+    expect(await includedRanges(), 'its range is no longer included').toBe('[]')
+
+    await edit('⧉ aaaaaaa:9-9')
+
+    expect(world.box.text, 'still being typed').toBe('⧉ aaaaaaa:9-9')
+
+    await edit('⧉ aaaaaaa:9-9 ')
+
+    expect(world.box.text).toBe('⧉ aaaaaaa:9-9 ')
+    expect(world.box.decorations, 'painted yellow again').toEqual([
+      { start: 0, end: '⧉ aaaaaaa:9-9'.length, color: 'yellow' },
+    ])
+    expect(await includedRanges(), 'the line is marked').toBe('[{"from":9,"to":9}]')
+
+    await edit('why ⧉ aaaaaaa:9-999 ', 0)
+
+    expect(world.box.text, 'a range past the content stays text').toBe('why ⧉ aaaaaaa:9-999 ')
+
+    await ui.unmount()
+  })
+
   test('including the whole commit drops its included lines and turns the mark green', async ($, on) => {
     const world = await openedWorldOf($, on)
 

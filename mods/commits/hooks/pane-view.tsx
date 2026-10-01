@@ -238,6 +238,18 @@ export function contentLinesOf(model: PaneModel): Line[] {
   return laidOut.lines
 }
 
+/**
+ * The content's rows for any listed commit, as `contentLinesOf` lays them
+ * out for the selected one: what a range of lines indexes into.
+ *
+ * @param model what the pane draws
+ * @param sha the commit
+ * @returns the rows
+ */
+export function contentLinesFor(model: PaneModel, sha: string): Line[] {
+  return sha === model.selectedSha ? contentLinesOf(model) : layoutOf({ ...model, selectedSha: sha })
+}
+
 function layoutOf(model: PaneModel): Line[] {
   const commit = model.commits.find(
     candidate => candidate.sha === model.selectedSha,
