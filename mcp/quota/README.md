@@ -31,7 +31,8 @@ An answer for an account under heavy load, abridged:
       "resets_at": "2026-10-01T04:00:00+00:00",
       "resets_at_local": "2026-09-30T21:00:00-07:00",
       "resets_in_minutes": 284,
-      "percent_per_minute": { "last_2_min": 1.0, "last_10_min": 1.0, "last_20_min": 1.25 }
+      "percent_per_minute": { "last_2_min": 1.0, "last_10_min": 1.0, "last_20_min": 1.25 },
+      "guidance": "Start only work that will finish before this window runs out. ..."
     },
     "seven_day": { "...": "the same fields" }
   },
@@ -53,6 +54,9 @@ An answer for an account under heavy load, abridged:
   so the 2-minute rate moves in steps of half a point a minute.
 - `measured_minutes` appears only for a span that reaches back past the start of the window or of
   the recording.
+- `guidance` appears on a window that runs out before it resets at the 2-minute rate, and says what
+  to do: start only work that will finish, or for a weekly window, ask the user before large work.
+  When the 10-minute rate would last until the reset, it says the 2-minute rate is a burst instead.
 - `context` is the calling conversation's own. For a subagent it is read from the subagent's
   transcript and has no window size, which the transcript does not record. It is left out when it
   cannot be read.

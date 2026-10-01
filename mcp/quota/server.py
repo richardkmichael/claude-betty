@@ -85,8 +85,9 @@ each extra parallel agent raises the rate. Then:
    part of it that reaches a checkpoint, and tell the user when the limit is expected and when the
    window resets, in local time. Work already running carries on.
 
-Check the 2-minute rate against the 10- and 20-minute rates before acting on it: one whole-percent
-step can make the 2-minute rate look like a burst."""
+A window's guidance field, when present, says which of these applies to it. Check the 2-minute
+rate against the 10- and 20-minute rates before acting on it: one whole-percent step can make the
+2-minute rate look like a burst."""
 
 app = MCPServer("quota", instructions=INSTRUCTIONS)
 
@@ -271,6 +272,9 @@ class Window(OmitUnset):
     )
     fetched_seconds_ago: int | None = Field(
         default=None, description="Per-model windows only: age of the usage-endpoint reading"
+    )
+    guidance: str | None = Field(
+        default=None, description="What to do about this window; absent when nothing applies"
     )
 
 
@@ -492,6 +496,41 @@ def exhaustion(windows):
     return forecast
 
 
+# Each tells the model what to do, and carries no numbers: the window it sits in has them.
+GUIDE_SHORT = (
+    "Start only work that will finish before this window runs out. Work in progress carries on."
+)
+GUIDE_WEEKLY = "Ask the user before starting large work."
+GUIDE_BURST = (
+    "The 2-minute rate is a burst. At the 10-minute rate, this window lasts until it resets."
+)
+
+
+def runs_out(used, pace, resets_in_minutes):
+    """Whether a window reaches 100% before it resets, at pace percentage points a minute."""
+    return bool(pace and pace > 0) and max(0, 100 - used) / pace < resets_in_minutes
+
+
+def guidance(window, weekly):
+    """What to do about a window that runs out before it resets at the 2-minute rate, or None.
+
+    A window that runs out at the 2-minute rate but not at the 10-minute rate is in a burst, and
+    the guidance says so rather than raising an alarm the steadier rate does not support. weekly is
+    true for the seven-day plan window and the per-model weekly windows, which take days to reset.
+    """
+    rates, used, left = (
+        window["percent_per_minute"],
+        window["used_percent"],
+        window["resets_in_minutes"],
+    )
+    if not runs_out(used, rates.get(f"last_{RATE_SPANS[0]}_min"), left):
+        return None
+    steady = rates.get(f"last_{RATE_SPANS[1]}_min")
+    if steady is not None and not runs_out(used, steady, left):
+        return GUIDE_BURST
+    return GUIDE_WEEKLY if weekly else GUIDE_SHORT
+
+
 def subagent_context(transcript_path, session_id, agent_id):
     """A subagent's context as of its last API response, from its own transcript, or None.
 
@@ -622,6 +661,10 @@ async def get_quota(ctx: Context) -> Quota:
     rows = history(account)
     plan = plan_report(session, rows, now)
     models, omitted = model_report(account, rows)
+    for name, window in plan.items():
+        window["guidance"] = guidance(window, weekly=name == "seven_day")
+    for window in (models or {}).values():
+        window["guidance"] = guidance(window, weekly=True)
     answer = {
         "account": session.get("account_label"),
         "plan_as_of": iso(session["response_at"]),

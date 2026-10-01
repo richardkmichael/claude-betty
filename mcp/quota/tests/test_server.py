@@ -223,6 +223,30 @@ def test_history_rows_that_do_not_match_the_schema_are_skipped(server, state):
     assert answer(server)["plan"]["five_hour"]["percent_per_minute"]["last_2_min"] == 1.0
 
 
+def test_guidance_names_what_to_do_about_each_window(server):
+    result = answer(server)
+    # Runs out at the 2-minute rate (70 minutes) but not at the 10-minute rate (350).
+    assert result["plan"]["five_hour"]["guidance"] == server.GUIDE_BURST
+    assert "guidance" not in result["plan"]["seven_day"]  # no movement in the last 2 minutes
+    # Runs out in 110 minutes at either rate, and a weekly window takes days to reset.
+    assert result["models"]["Fable"]["guidance"] == server.GUIDE_WEEKLY
+
+
+@pytest.mark.parametrize(
+    ("rates", "weekly", "expected"),
+    [
+        ({"last_2_min": 1.0, "last_10_min": 1.0}, False, "GUIDE_SHORT"),
+        ({"last_2_min": 1.0, "last_10_min": 1.0}, True, "GUIDE_WEEKLY"),
+        ({"last_2_min": 1.0}, False, "GUIDE_SHORT"),  # no 10-minute rate to call it a burst
+        ({"last_2_min": 0.1, "last_10_min": 1.0}, False, None),  # lasts until the reset
+        ({"last_2_min": 0.0}, False, None),
+    ],
+)
+def test_guidance_rules(server, rates, weekly, expected):
+    window = {"used_percent": 50, "resets_in_minutes": 100, "percent_per_minute": rates}
+    assert server.guidance(window, weekly) == (getattr(server, expected) if expected else None)
+
+
 def test_the_main_conversations_context_comes_from_the_recording(server, state):
     reading = {"used_tokens": 1000, "window_tokens": 200000, "compacts_at_tokens": 167000}
     state.session(context={"model": "claude-opus-5-5", **reading})
