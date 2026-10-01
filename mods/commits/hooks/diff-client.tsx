@@ -59,6 +59,14 @@ type State = {
 const IDLE: State = { anchor: null, focus: null, isDrag: false }
 
 /**
+ * The colours of an inclusion wherever it is marked (a commit's row, the
+ * region's gutter, the commit reference in the prompt box): green for a whole
+ * commit, yellow for some of its lines.
+ */
+export const WHOLE_INCLUDED_COLOR = 'green'
+export const LINES_INCLUDED_COLOR = 'yellow'
+
+/**
  * The gutter before each line: the included mark on an included range's
  * first and last lines, a dashed rule on the lines between, or blank.
  */
@@ -121,7 +129,7 @@ const diffClient: ClientModule<DiffClientProps, State> = (props, surface) => {
     return (
       <Box flexDirection="row">
         <Text
-          color="cyan"
+          color={LINES_INCLUDED_COLOR}
           {...(gutter === RANGE_RULE ? { dimColor: true } : {})}
         >
           {gutter}

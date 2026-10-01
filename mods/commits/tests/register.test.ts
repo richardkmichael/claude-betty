@@ -587,7 +587,7 @@ describe('register', () => {
     expect(textOf(await $.ui.render(FOCUSED_PANE))).toContain('❯ ⧉ bbbbbbb Start the plugin')
   })
 
-  test('every written commit reference is painted in the native pill colour, its space not', async ($, on) => {
+  test('every written commit reference is painted, its space not', async ($, on) => {
     const world = await openedWorldOf($, on)
     const first = commitReferenceOf('aaaaaaa')
     const second = commitReferenceOf('bbbbbbb')
@@ -596,7 +596,7 @@ describe('register', () => {
     await $.ui.press({ plugin: Names.PLUGIN_NAME, key: 'ask' })
     await world.clock.settle()
 
-    expect(world.box.decorations).toEqual([{ start: 0, end: first.length, color: 'ide' }])
+    expect(world.box.decorations).toEqual([{ start: 0, end: first.length, color: 'green' }])
 
     await $.ui.press({ plugin: Names.PLUGIN_NAME, key: 'list-down' })
     await world.clock.settle()
@@ -607,17 +607,20 @@ describe('register', () => {
     const secondStart = first.length + 1
 
     expect(world.box.decorations, 'a fill replaces the runs, so both are painted').toEqual([
-      { start: 0, end: first.length, color: 'ide' },
-      { start: secondStart, end: secondStart + second.length, color: 'ide' },
+      { start: 0, end: first.length, color: 'green' },
+      { start: secondStart, end: secondStart + second.length, color: 'green' },
     ])
   })
 
-  test('only the commit references named are painted, wherever they sit', async () => {
+  test('only the commit references named are painted, green for a commit and yellow for lines', async () => {
     const mine = commitReferenceOf('aaaaaaa')
-    const text = `see ${mine} and ⧉ fffffff too`
+    const lines = linesCommitReferenceOf('bbbbbbb', { from: 2, to: 4 })
+    const text = `see ${mine} and ⧉ fffffff and ${lines}`
+    const linesStart = text.indexOf(lines)
 
-    expect(commitReferenceDecorationsOf(text, new Set([mine]))).toEqual([
-      { start: 4, end: 4 + mine.length, color: 'ide' },
+    expect(commitReferenceDecorationsOf(text, new Set([mine, lines]))).toEqual([
+      { start: 4, end: 4 + mine.length, color: 'green' },
+      { start: linesStart, end: linesStart + lines.length, color: 'yellow' },
     ])
   })
 

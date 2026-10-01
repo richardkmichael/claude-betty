@@ -18,6 +18,7 @@ import type {
 
 import { askTextOf, linesTextOf } from './ask-text-of'
 import type { DiffClientPost } from './diff-client'
+import { LINES_INCLUDED_COLOR, WHOLE_INCLUDED_COLOR } from './diff-client'
 import * as Git from './git'
 import * as Names from './names'
 import {
@@ -154,9 +155,6 @@ function commitReferenceTextOf(inner: string): string {
  */
 const COMMIT_REFERENCE_PATTERN = /⧉ [0-9a-f]+(:\d+-\d+)?(?![\w:-]) ?/g
 
-/** The theme colour the composer draws the native diff selection's pill in. */
-const COMMIT_REFERENCE_COLOR = 'ide'
-
 /**
  * The commit references standing whole in the text, in order.
  *
@@ -169,7 +167,8 @@ export function commitReferencesIn(text: string): string[] {
 
 /**
  * The runs that paint each of the given commit references in the text in the
- * native pill's colour, the space after one left unpainted.
+ * colour of its inclusion, as the pane marks it: green for a whole commit,
+ * yellow for a range of lines. The space after one is left unpainted.
  *
  * @param text the prompt's text
  * @param commitReferences the commit references to paint
@@ -182,9 +181,10 @@ export function commitReferenceDecorationsOf(
   return [...text.matchAll(COMMIT_REFERENCE_PATTERN)].flatMap(match => {
     const commitReference = match[0].trimEnd()
     const start = match.index ?? 0
+    const color = match[1] === undefined ? WHOLE_INCLUDED_COLOR : LINES_INCLUDED_COLOR
 
     return commitReferences.has(commitReference)
-      ? [{ start, end: start + commitReference.length, color: COMMIT_REFERENCE_COLOR }]
+      ? [{ start, end: start + commitReference.length, color }]
       : []
   })
 }

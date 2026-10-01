@@ -4,6 +4,7 @@
 import type { ClientProps, ElementConstructor, ElementTable, RenderElement } from 'claude-code'
 
 import type { DiffClientProps, LineRange } from './diff-client'
+import { LINES_INCLUDED_COLOR, WHOLE_INCLUDED_COLOR } from './diff-client'
 import type { Commit, FileDiff } from './git'
 import { sanitize } from './git'
 import {
@@ -125,12 +126,6 @@ export const POINTER = '❯'
 
 /** An included row's mark, in the gutter's third column. */
 export const INCLUDED_MARK = '⧉'
-
-/** The mark's colour when the whole commit is included. */
-export const WHOLE_INCLUDED_COLOR = 'green'
-
-/** The mark's colour when only some of the commit's lines are included. */
-export const LINES_INCLUDED_COLOR = 'yellow'
 
 /** The gutter before a commit row: pointer, space, included mark, space. */
 const GUTTER = `${POINTER} ${INCLUDED_MARK} `
