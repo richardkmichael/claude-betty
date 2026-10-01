@@ -133,11 +133,12 @@ function worldOf(
 
     const line = e.argv.join(' ')
     const found = Object.entries(script).find(([key]) => line.includes(key))
+    const untruncated = { isStdoutTruncated: false, isStderrTruncated: false }
 
     return {
       value: found
-        ? { exitCode: 0, stdout: found[1], stderr: '' }
-        : { exitCode: 128, stdout: '', stderr: 'fatal: not a git repository' },
+        ? { exitCode: 0, stdout: found[1], stderr: '', ...untruncated }
+        : { exitCode: 128, stdout: '', stderr: 'fatal: not a git repository', ...untruncated },
     }
   })
 
