@@ -19,6 +19,7 @@ import {
   linesCommitReferenceOf,
   referenceEditOf,
   withoutCommitReference,
+  withoutOtherLines,
 } from '../hooks/register'
 
 tier('user')
@@ -637,6 +638,46 @@ describe('register', () => {
     expect(withoutCommitReference(text, whole), 'nothing to strip').toBe(text)
   })
 
+  test('Opt+Backspace makes a range of lines the whole commit, then removes it', async () => {
+    const lines = linesCommitReferenceOf('aaaaaaa', { from: 9, to: 10 })
+    const whole = commitReferenceOf('bbbbbbb')
+    const text = `why ${lines} and ${whole} more`
+    const written = new Set([lines, whole])
+    const linesStart = text.indexOf(lines)
+    const wholeStart = text.indexOf(whole)
+    const optBackspaceAt = (cursor: number) => ({
+      key: { key: 'backspace', meta: true as const },
+      text,
+      cursor,
+      start: cursor - 1,
+      end: cursor,
+      inputText: '',
+    })
+
+    expect(referenceEditOf(optBackspaceAt(linesStart + lines.length + 1), written)).toEqual({
+      kind: 'whole',
+      lines,
+      start: linesStart,
+      end: linesStart + lines.length + 1,
+      commitReference: commitReferenceOf('aaaaaaa'),
+    })
+    expect(referenceEditOf(optBackspaceAt(wholeStart + 3), written), 'the cursor inside').toEqual({
+      kind: 'remove',
+      start: wholeStart,
+      end: wholeStart + whole.length + 1,
+    })
+    expect(
+      referenceEditOf({ ...optBackspaceAt(wholeStart + 3), key: { key: 'backspace', shift: true } }, written),
+      'Shift+Backspace does the same',
+    ).toEqual({ kind: 'remove', start: wholeStart, end: wholeStart + whole.length + 1 })
+    expect(
+      referenceEditOf({ ...optBackspaceAt(linesStart + lines.length), key: { key: 'backspace' } }, written),
+      'a plain Backspace edits a character',
+    ).toBeNull()
+    expect(referenceEditOf(optBackspaceAt(3), written), 'away from a reference').toBeNull()
+    expect(referenceEditOf(optBackspaceAt(wholeStart + 3), new Set([lines])), 'not written').toBeNull()
+  })
+
   test('an arrow that would land inside a commit reference lands at its edge', async () => {
     const whole = commitReferenceOf('bbbbbbb')
     const text = `see ${whole} here`
@@ -648,6 +689,19 @@ describe('register', () => {
     expect(referenceEditOf(moveTo(start, start + 1), written), '→ jumps past it').toEqual({ kind: 'move', at: end })
     expect(referenceEditOf(moveTo(end, end - 1), written), '← jumps before it').toEqual({ kind: 'move', at: start })
     expect(referenceEditOf(moveTo(end, end + 1), written), 'outside it').toBeNull()
+  })
+
+  test("including the whole commit takes the commit's other ranges out of the box", async () => {
+    const whole = commitReferenceOf('aaaaaaa')
+    const first = linesCommitReferenceOf('aaaaaaa', { from: 1, to: 2 })
+    const second = linesCommitReferenceOf('aaaaaaa', { from: 5, to: 6 })
+    const other = linesCommitReferenceOf('bbbbbbb', { from: 1, to: 2 })
+    const text = `${first} x ${whole} ${second} ${other} y`
+
+    expect(withoutOtherLines({ text, cursor: text.length }, whole)).toEqual({
+      text: `x ${whole} ${other} y`,
+      cursor: text.length - (first.length + 1) - (second.length + 1),
+    })
   })
 
   test('the prompt rides an included commit, once', async ($, on) => {

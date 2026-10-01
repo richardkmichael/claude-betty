@@ -86,8 +86,13 @@ prompt that held only commit references is sent as `See the attached
 commit.` `/clear` and `/resume` forget everything and take the commit
 references out.
 
-In the prompt box a commit reference is edited like other text, except
-that ← and → stop at a reference's edge instead of stepping into it.
+In the prompt box a commit reference is edited like other text, with two
+exceptions. Opt+Backspace (or Shift+Backspace, where the terminal sends it
+distinctly) with the cursor in a reference or just after its space walks it
+down a level: a range of lines becomes its whole commit, as if `a` were
+pressed in the pane (any other range of that commit leaves the box), and a
+whole commit is removed with its space. ← and → stop at a reference's edge
+instead of stepping into it.
 
 The ctrl+↑/↓ chords are the engine's diff-list actions, declared on two
 empty buttons; with the built-in diff pane open too, the engine gives the

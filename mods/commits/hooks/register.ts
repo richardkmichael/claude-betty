@@ -7,6 +7,7 @@ import type {
   ProcessRunResult,
   PromptBox,
   PromptDecoration,
+  PromptEditInput,
   PromptFillArgs,
   PromptFilled,
   ToolSpec,
@@ -186,11 +187,16 @@ function referenceSpansIn(text: string): ReferenceSpan[] {
 
 /**
  * What an edit of the prompt box does to the written commit references
- * instead of what it would: an arrow that would land inside one lands at its
+ * instead of what it would: Opt+Backspace or Shift+Backspace on a range of lines (the cursor in
+ * it or after its space) makes it the whole commit, and on a whole commit
+ * removes it with its space; an arrow that would land inside one lands at its
  * edge, before it moving left and after it moving right. Every other edit is
  * left alone, null.
  */
-export type ReferenceEdit = { kind: 'move'; at: number }
+export type ReferenceEdit =
+  | { kind: 'whole'; lines: string; start: number; end: number; commitReference: string }
+  | { kind: 'remove'; start: number; end: number }
+  | { kind: 'move'; at: number }
 
 /**
  * The reference edit an edit of the prompt box makes, if any.
@@ -200,7 +206,7 @@ export type ReferenceEdit = { kind: 'move'; at: number }
  * @returns the reference edit, or null for an ordinary edit
  */
 export function referenceEditOf(
-  edit: { text: string; cursor: number; start: number; end: number; inputText: string },
+  edit: Pick<PromptEditInput, 'key' | 'text' | 'cursor' | 'start' | 'end' | 'inputText'>,
   written: ReadonlySet<string>,
 ): ReferenceEdit | null {
   const spans = referenceSpansIn(edit.text).filter(span => written.has(span.commitReference))
@@ -215,7 +221,58 @@ export function referenceEditOf(
     return { kind: 'move', at: edit.start < edit.cursor ? inside.start : inside.end }
   }
 
-  return null
+  // Shift reaches the composer only where the terminal sends a modified
+  // Backspace (a CSI-u sequence); Opt+Backspace arrives as meta everywhere.
+  const isWalk = edit.key?.key === 'backspace' && (edit.key.meta === true || edit.key.shift === true)
+
+  if (!isWalk) {
+    return null
+  }
+
+  const span = spans.find(candidate => edit.cursor > candidate.start && edit.cursor <= candidate.spanEnd)
+
+  if (!span) {
+    return null
+  }
+
+  return span.shaEnd < span.end
+    ? {
+        kind: 'whole',
+        lines: span.commitReference,
+        start: span.start,
+        end: span.spanEnd,
+        commitReference: span.commitReference.slice(0, span.shaEnd - span.start),
+      }
+    : { kind: 'remove', start: span.start, end: span.spanEnd }
+}
+
+/**
+ * The box with a commit's range-of-lines commit references removed, the
+ * cursor kept on the same text: what including the whole commit leaves.
+ *
+ * @param box the prompt box
+ * @param commitReference the whole commit's commit reference
+ * @returns the box without them
+ */
+export function withoutOtherLines(box: PromptBox, commitReference: string): PromptBox {
+  let removedBeforeCursor = 0
+
+  const text = box.text.replace(
+    COMMIT_REFERENCE_PATTERN,
+    (match: string, range: string | undefined, offset: number) => {
+      const isLinesOf = range !== undefined && match.trimEnd().slice(0, -range.length) === commitReference
+
+      if (!isLinesOf) {
+        return match
+      }
+
+      removedBeforeCursor += Math.min(match.length, Math.max(0, box.cursor - offset))
+
+      return ''
+    },
+  )
+
+  return { text, cursor: box.cursor - removedBeforeCursor }
 }
 
 /**
@@ -666,6 +723,61 @@ export function register(on: On) {
     )
   }
 
+  /**
+   * Makes the included range of lines whose commit reference is `lines` the
+   * whole commit, as `a` includes it: the commit's ranges are dropped and its
+   * commit reference is the one the edit writes. False, changing nothing,
+   * when the commit is not in the listing to build its block from.
+   */
+  function promoteToWhole(engine: Host, lines: string): boolean {
+    const entry = [...included.values()].find(candidate => candidate.commitReference === lines)
+    const commit = entry && model.commits.find(candidate => candidate.sha === entry.sha)
+
+    if (!entry || !commit) {
+      return false
+    }
+
+    for (const other of linesIncludedOf(commit.sha)) {
+      included.delete(other.key)
+    }
+
+    includeWritten(engine, commit)
+
+    return true
+  }
+
+  /**
+   * Includes a whole commit whose commit reference is already in the box. Its
+   * block is built from the loaded diff, or rebuilt once the diff loads.
+   */
+  function includeWritten(engine: Host, commit: Git.Commit) {
+    const state = model.diffs[commit.sha]
+    const whole: Included = {
+      key: commit.sha,
+      kind: 'commit',
+      sha: commit.sha,
+      short: commit.short,
+      commitReference: commitReferenceOf(commit.short),
+      text: askTextOf(commit, state?.kind === 'loaded' ? state.files : []),
+      isWritten: true,
+    }
+
+    included.set(commit.sha, whole)
+
+    if (state?.kind !== 'loaded') {
+      void loadDiff(engine, commit.sha).then(() => {
+        const loaded = model.diffs[commit.sha]
+
+        if (loaded?.kind === 'loaded' && included.get(commit.sha) === whole) {
+          whole.text = askTextOf(commit, loaded.files)
+        }
+      })
+    }
+
+    syncIncluded()
+    engine.invalidate()
+  }
+
   async function closePane(engine: Host) {
     await engine.closePane({ id: Names.PANE_ID })
     isOpen = false
@@ -1014,11 +1126,29 @@ export function register(on: On) {
     }
 
     const change = referenceEditOf(e, writtenCommitReferences())
+    let box: { text: string; cursor: number; decorations?: PromptDecoration[] }
 
-    // An arrow landing in a reference is answered without next: the cursor
-    // lands at the reference's edge.
-    const box: { text: string; cursor: number; decorations?: PromptDecoration[] } =
-      change === null ? await next(e) : { text: e.text, cursor: change.at }
+    if (change === null) {
+      box = await next(e)
+    } else if (change.kind === 'move') {
+      // answered without next: the cursor lands at the reference's edge
+      box = { text: e.text, cursor: change.at }
+    } else if (change.kind === 'whole' && promoteToWhole(engine, change.lines)) {
+      const inputText = `${change.commitReference} `
+
+      box = withoutOtherLines(
+        {
+          text: `${e.text.slice(0, change.start)}${inputText}${e.text.slice(change.end)}`,
+          cursor: change.start + inputText.length,
+        },
+        change.commitReference,
+      )
+    } else {
+      box = {
+        text: `${e.text.slice(0, change.start)}${e.text.slice(change.end)}`,
+        cursor: change.start,
+      }
+    }
 
     reconcileIncluded(engine, box.text)
 
