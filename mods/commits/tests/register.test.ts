@@ -49,10 +49,10 @@ const FOCUSED_PANE: RenderInput<'Pane'> = {
   props: { ...PANE.props, isFocused: true },
 }
 
-/** The pane with nine body rows: six pinned rows and a three-row window. */
+/** The pane with eleven body rows: six pinned rows and a three-row window inside its border. */
 const SHORT_PANE: RenderInput<'Pane'> = {
   ...PANE,
-  props: { ...PANE.props, scroll: { offset: 0, bodyRows: 9 } },
+  props: { ...PANE.props, scroll: { offset: 0, bodyRows: 11 } },
 }
 
 /** One arrow press down while the pane has the keys. */

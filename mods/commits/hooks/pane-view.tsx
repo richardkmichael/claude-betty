@@ -130,6 +130,10 @@ export const SCROLL_MARGIN_ROWS = 8
 /** Rows of padding above the header, inside the pane's body, as the native diff sidebar has. */
 export const TOP_PADDING_ROWS = 1
 
+/** The border drawn around the content window, and the rows its top and bottom edges take. */
+const CONTENT_BORDER_STYLE = 'round'
+export const CONTENT_BORDER_ROWS = 2
+
 export const EMPTY_MODEL: PaneModel = {
   label: '',
   commits: [],
@@ -183,13 +187,13 @@ export function pinnedRowsOf(model: PaneModel): number {
 
 /**
  * The rows the content window shows at once: what the body leaves under the
- * pinned rows, at least one.
+ * pinned rows and inside the content's border, at least one.
  *
  * @param model what the pane draws
  * @returns the row count
  */
 export function visibleRowsOf(model: PaneModel): number {
-  return Math.max(1, model.bodyRows - pinnedRowsOf(model))
+  return Math.max(1, model.bodyRows - pinnedRowsOf(model) - CONTENT_BORDER_ROWS)
 }
 
 /** The content last laid out and what it was laid out from, by identity. */
@@ -402,19 +406,17 @@ export function paneView(
   const { Box, Text, Client } = ui
   const window = windowOf(model)
 
-  const content: RenderElement[] = Client
-    ? [
-        <Client
-          key="diff"
-          module="./diff-client.tsx"
-          height={window.visible}
-          props={clientPropsOf(model, window)}
-        />,
-        ...Array.from({ length: SCROLL_MARGIN_ROWS }, () => (
-          <Text> </Text>
-        )),
-      ]
-    : plainRowsOf(ui, window)
+  const shown = Client ? (
+    <Client
+      key="diff"
+      module="./diff-client.tsx"
+      height={window.visible}
+      props={clientPropsOf(model, window)}
+    />
+  ) : (
+    plainRowsOf(ui, window)
+  )
+  const margin = Array.from({ length: SCROLL_MARGIN_ROWS }, () => <Text> </Text>)
 
   const rows: RenderElement[] = model.commits.map(commit =>
     commitRow(ui, model, actions, commit),
@@ -432,17 +434,21 @@ export function paneView(
     <Box flexDirection="column" gap={1} paddingTop={TOP_PADDING_ROWS}>
       {headerRow(ui, model, actions)}
       <Box flexDirection="column">{rows}</Box>
-      <Box flexDirection="column">{content}</Box>
+      <Box flexDirection="column">
+        <Box flexDirection="column" borderStyle={CONTENT_BORDER_STYLE} borderDimColor>
+          {shown}
+        </Box>
+        {margin}
+      </Box>
     </Box>
   )
 }
 
-/** The window's rows as plain text, padded past the body like the region. */
+/** The window's rows as plain text, padded to the window's height like the region. */
 function plainRowsOf(ui: PaneUi, window: ContentWindow): RenderElement[] {
-  const wanted = window.visible + SCROLL_MARGIN_ROWS
-  const shown = window.lines.slice(window.top, window.top + wanted)
+  const shown = window.lines.slice(window.top, window.top + window.visible)
 
-  while (shown.length < wanted) {
+  while (shown.length < window.visible) {
     shown.push({ text: '', kind: 'blank' })
   }
 
