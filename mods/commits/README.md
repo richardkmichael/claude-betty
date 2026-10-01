@@ -33,14 +33,16 @@ the pinned rows.
 The pane opens holding the keyboard, with the focus ring on the selected
 row. `ctrl+x tab` gives a pane the keys later; `ctrl+x x` closes one.
 
-| key                  | what it does                                              |
-| -------------------- | --------------------------------------------------------- |
-| Tab, Shift+Tab       | move the ring; a row it lands on becomes the selection   |
-| ctrl+↑, ctrl+↓       | move the selection, from the prompt too (opt+↑/↓ as well) |
-| ↑ ↓, PgUp PgDn, wheel | scroll the content; the list stays put                  |
-| Enter                | press the ring's button                                   |
-| `a`                  | attach the selected commit to the next prompt, or detach |
-| Esc                  | close the pane                                            |
+| key                   | what it does                                              |
+| --------------------- | --------------------------------------------------------- |
+| Tab, Shift+Tab        | move the ring; a row it lands on becomes the selection    |
+| ↑ ↓                   | move the selection                                        |
+| ctrl+↑, ctrl+↓        | move the selection, from the prompt too (opt+↑/↓ as well) |
+| `f`, `b`              | page the content forward and back, as `less` does         |
+| PgUp PgDn, wheel      | scroll the content; the list stays put                    |
+| Enter                 | press the ring's button                                   |
+| `a`                   | attach the selected commit to the next prompt, or detach  |
+| Esc                   | close the pane                                            |
 
 Pressing `a` includes the selected commit: the row gets a green `⧉` in the
 gutter and `[⧉ <sha>]` is appended to the prompt box at once, painted in the
@@ -58,12 +60,12 @@ there includes that range: the lines get `⧉` in the region's gutter, the
 commit's row gets a yellow `⧉` (green once the whole commit is included,
 which also drops its ranges), and `[⧉ <sha>:<from>-<to>]` is appended to the
 prompt box. A click on an included range excludes it; a click elsewhere only
-gives the region the keys. While the region holds them: ↑ ↓ `j` `k` PgUp
-PgDn scroll it, Tab, Shift+Tab and ctrl+↑/↓ move between commits, `a`
-includes or excludes the selected commit, and the keys stay in the region
-through all of it, unlike `a` pressed on the pane's own ring, after which
-the composer takes them. Other typed letters go nowhere; Escape hands the
-keys back to the composer.
+gives the region the keys. While the region holds them: `f` `b` PgUp PgDn
+page it and `j` `k` scroll it a line, Tab, Shift+Tab and ↑ ↓ move between
+commits, `a` includes or excludes the selected commit, and the keys stay in
+the region through all of it, unlike `a` pressed on the pane's own ring,
+after which the composer takes them. Other typed letters go nowhere; Escape
+hands the keys back to the composer.
 
 When the prompt is sent, each included commit rides along as hidden context
 beginning `The user attached commit <sha>`: a `<commit>` element with the

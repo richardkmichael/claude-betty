@@ -458,7 +458,7 @@ describe('register', () => {
     expect(drawn).toContain(`"hotkey":"${Names.ASK_HOTKEY}"`)
   })
 
-  test('the arrows scroll the content under the pinned list', async ($, on) => {
+  test('the arrows move the selection, and f and b page the content under the pinned list', async ($, on) => {
     const world = await openedWorldOf($, on)
 
     const before = JSON.stringify(await $.ui.render(SHORT_PANE))
@@ -469,17 +469,24 @@ describe('register', () => {
     expect(await $.ui.scroll(ARROW_DOWN)).toEqual({})
     await world.clock.settle()
 
-    const afterTree = await $.ui.render(SHORT_PANE)
-    const after = JSON.stringify(afterTree)
-
-    expect(countIn(after, 'Add the pane'), 'the content head scrolled away').toBe(1)
-    expect(textOf(afterTree)).toContain('❯   aaaaaaa Add the pane')
-    expect(textOf(afterTree)).toContain('bbbbbbb Start the plugin')
-    expect(after).toContain('"offset":1')
-    expect(world.scrolled, 'the engine never scrolls the pane itself').toEqual([])
+    expect(textOf(await $.ui.render(SHORT_PANE))).toContain('❯   bbbbbbb Start the plugin')
 
     await $.ui.scroll({ ...ARROW_DOWN, by: -1, offset: 0 })
-    await $.ui.scroll({ ...ARROW_DOWN, by: -1, offset: 0 })
+    await world.clock.settle()
+
+    expect(textOf(await $.ui.render(SHORT_PANE))).toContain('❯   aaaaaaa Add the pane')
+
+    await $.ui.press({ plugin: Names.PLUGIN_NAME, key: 'page-forward' })
+    await world.clock.settle()
+
+    const pagedTree = await $.ui.render(SHORT_PANE)
+    const paged = JSON.stringify(pagedTree)
+
+    expect(countIn(paged, 'Add the pane'), 'the content head paged away').toBe(1)
+    expect(textOf(pagedTree), 'the selection stays').toContain('❯   aaaaaaa Add the pane')
+    expect(paged).not.toContain('"offset":0')
+
+    await $.ui.press({ plugin: Names.PLUGIN_NAME, key: 'page-back' })
     await world.clock.settle()
 
     expect(JSON.stringify(await $.ui.render(SHORT_PANE))).toContain('"offset":0')
@@ -912,14 +919,14 @@ describe('register', () => {
     await ui.unmount()
   })
 
-  test('keys inside the region scroll the window', async ($, on) => {
+  test('keys inside the region scroll the window, and the arrows move the selection', async ($, on) => {
     const world = await openedWorldOf($, on)
 
     const ui = await mountedPaneOf($, SHORT_PANE, 4)
 
     expect(await ui.find({ in: 'diff', text: /Add the pane/ })).toBeDefined()
 
-    await ui.key({ key: 'down', in: 'diff' })
+    await ui.key({ key: 'j', in: 'diff' })
     await world.clock.settle()
 
     expect(await ui.find({ in: 'diff', text: /Add the pane/ }), 'the head scrolled away').toBeUndefined()
@@ -929,6 +936,21 @@ describe('register', () => {
     await world.clock.settle()
 
     expect(await ui.find({ in: 'diff', text: /Add the pane/ })).toBeDefined()
+
+    await ui.key({ key: 'f', in: 'diff' })
+    await world.clock.settle()
+
+    expect(await ui.find({ in: 'diff', text: /Add the pane/ }), 'f pages forward').toBeUndefined()
+
+    await ui.key({ key: 'b', in: 'diff' })
+    await world.clock.settle()
+
+    expect(await ui.find({ in: 'diff', text: /Add the pane/ }), 'b pages back').toBeDefined()
+
+    await ui.key({ key: 'down', in: 'diff' })
+    await world.clock.settle()
+
+    expect(textOf(await $.ui.render(SHORT_PANE))).toContain('❯   bbbbbbb Start the plugin')
 
     await ui.unmount()
   })

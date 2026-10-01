@@ -471,6 +471,13 @@ export function register(on: On) {
     await syncBox(engine).catch(() => undefined)
   }
 
+  /** Scrolls the content by whole windows, forward for a positive count. */
+  function pageBy(engine: Host, pages: number) {
+    if (setTop(model.top + pages * windowOf(model).visible)) {
+      engine.invalidate()
+    }
+  }
+
   /**
    * Places the content window's first row, clamped to the content.
    *
@@ -798,6 +805,15 @@ export function register(on: On) {
     const { visible, maxTop } = windowOf(model)
     const size = Math.abs(e.by)
     const isWheel = e.pointer !== undefined
+
+    // An arrow moves one row and carries no pointer: it moves the selection,
+    // and the wheel and the page keys scroll the content.
+    if (!isWheel && size === 1 && e.bodyRows > 1) {
+      selectBy(host, Math.sign(e.by))
+
+      return {}
+    }
+
     const isEnd = !isWheel && size >= e.contentRows && e.contentRows > e.bodyRows
     const isPage = !isWheel && !isEnd && size >= e.bodyRows
 
@@ -873,6 +889,7 @@ export function register(on: On) {
     return paneView({ Box, Text, Button, ...(Client ? { Client } : {}) }, model, {
       select: sha => select(engine, sha, 'other'),
       selectBy: delta => selectBy(engine, delta),
+      pageBy: pages => pageBy(engine, pages),
       toggleAsk: sha => toggleAsk(engine, sha),
     })
   })

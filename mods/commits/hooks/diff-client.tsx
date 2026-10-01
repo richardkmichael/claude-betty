@@ -68,11 +68,11 @@ let current: DiffClientProps = { offset: 0, lines: [], included: [] }
  * Draws the selected commit's content and turns a drag over its lines into a
  * range the hooks module includes: `down` anchors, `move` extends, `up` posts.
  * A click on an included range posts it back to be excluded; a click elsewhere
- * posts nothing and only gives the region the keys. Then arrow, page, `j`
- * and `k` keys post a scroll, Tab and ctrl+arrows post a move between
- * commits (Tab wrapping at the ends as the pane's ring does, ctrl+arrows
- * stopping there as the engine's list keys do), and `a` posts an ask for
- * the selected commit: the keys stay in the region through all of them.
+ * posts nothing and only gives the region the keys. Then page keys, `f`,
+ * `b`, `j` and `k` post a scroll, Tab and the arrows post a move between
+ * commits (Tab wrapping at the ends as the pane's ring does, the arrows
+ * stopping there as the pane's own do), and `a` posts an ask for the
+ * selected commit: the keys stay in the region through all of them.
  *
  * @param props the window of lines, its offset, and the included ranges
  * @param surface the region's elements, state, size, input and port
@@ -196,18 +196,18 @@ export function postForKey(event: ClientKeyEvent, page: number): DiffClientPost 
     return { kind: 'move', by: event.shift ? -1 : 1, wrap: true }
   }
 
-  if (event.ctrl && (event.key === 'down' || event.key === 'up')) {
+  if (event.key === 'down' || event.key === 'up') {
     return { kind: 'move', by: event.key === 'down' ? 1 : -1 }
   }
 
   const by =
-    event.key === 'down' || event.key === 'j'
+    event.key === 'j'
       ? 1
-      : event.key === 'up' || event.key === 'k'
+      : event.key === 'k'
         ? -1
-        : event.key === 'pagedown'
+        : event.key === 'pagedown' || event.key === 'f'
           ? page
-          : event.key === 'pageup'
+          : event.key === 'pageup' || event.key === 'b'
             ? -page
             : null
 

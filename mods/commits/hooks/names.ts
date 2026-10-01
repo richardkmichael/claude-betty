@@ -38,8 +38,12 @@ export const MAIN_LOOP_ONLY_TEXT =
 /** The key that includes or excludes the selected commit while the pane has the keys. */
 export const ASK_HOTKEY = 'a'
 
+/** The keys that page the content forward and back, as `less` does. */
+export const PAGE_FORWARD_HOTKEY = 'f'
+export const PAGE_BACK_HOTKEY = 'b'
+
 /** The key help centred in the header. */
-export const HELP_TEXT = 'Tab or ctrl+↑/↓ to select, arrows to read'
+export const HELP_TEXT = 'Tab or ↑/↓ to select, f/b to page'
 
 /**
  * The engine's list-scrolling actions (ctrl+up/down, opt+up/down from the

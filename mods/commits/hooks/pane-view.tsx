@@ -12,6 +12,8 @@ import {
   HELP_TEXT,
   LIST_DOWN_ACTION,
   LIST_UP_ACTION,
+  PAGE_BACK_HOTKEY,
+  PAGE_FORWARD_HOTKEY,
   countOf,
 } from './names'
 
@@ -65,6 +67,7 @@ export type IncludedMark = {
 export type PaneActions = {
   select: (sha: string) => void
   selectBy: (delta: number) => void
+  pageBy: (pages: number) => void
   toggleAsk: (sha: string) => Promise<void>
 }
 
@@ -74,6 +77,8 @@ export type PaneActions = {
  */
 export const CARRIER_KEYS: readonly string[] = [
   'ask',
+  'page-forward',
+  'page-back',
   'list-up',
   'list-down',
 ]
@@ -505,6 +510,22 @@ function headerRow(
               {''}
             </Button>
           ) : null}
+          <Button
+            key="page-forward"
+            plain
+            hotkey={PAGE_FORWARD_HOTKEY}
+            onPress={() => actions.pageBy(1)}
+          >
+            {''}
+          </Button>
+          <Button
+            key="page-back"
+            plain
+            hotkey={PAGE_BACK_HOTKEY}
+            onPress={() => actions.pageBy(-1)}
+          >
+            {''}
+          </Button>
         </Box>
         <Button
           key="list-up"
