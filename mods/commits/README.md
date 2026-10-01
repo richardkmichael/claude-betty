@@ -108,9 +108,10 @@ chord to the pane drawn last.
   the pane does not use go to the composer and take the keys with them;
   `ctrl+x tab` returns to the pane. The engine's `abovePrompt:focus` action
   can be bound to a single chord in `~/.claude/keybindings.json`.
-- On the main screen (`CLAUDE_CODE_NO_FLICKER=0`) `/commits` says so and opens
-  nothing. In the fullscreen layout the engine docks the pane beside the
-  transcript from 110 columns and seats it inline above the prompt below that.
+- On the terminal's main screen (`CLAUDE_CODE_NO_FLICKER=0`) `/commits` says
+  so and opens nothing. In the fullscreen layout the engine docks the pane
+  beside the transcript from 110 columns and seats it inline above the prompt
+  below that. In a session the desktop app draws, the app places the pane.
 - Diff lines are drawn as plain rows with the mod's own colouring, not the
   engine's highlighter, so the content window can be sliced by row and a
   drag can be mapped to lines. On VS Code and mobile, which have no `Client`,

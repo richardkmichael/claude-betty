@@ -310,6 +310,38 @@ describe('register', () => {
     expect(world.box.text).toBe('Look: at this')
   })
 
+  test('on the main screen /commits says so and opens nothing', async ($, on) => {
+    const world = worldOf(on)
+
+    on('session.surfaces', () => ({ value: ['terminal'] as const }))
+
+    await $.session.start(SESSION)
+
+    const { text } = await $.command.run({
+      ...COMMITS,
+      presentation: { isFullscreen: false, columns: 160 },
+    })
+
+    expect(text).toBe(Names.NEEDS_FULLSCREEN_TEXT)
+    expect(world.opened).toEqual([])
+  })
+
+  test('in a session the desktop app draws /commits opens the pane', async ($, on) => {
+    const world = worldOf(on)
+
+    on('session.surfaces', () => ({ value: ['desktop'] as const }))
+
+    await $.session.start(SESSION)
+
+    const { text } = await $.command.run({
+      ...COMMITS,
+      presentation: { isFullscreen: false, columns: 80 },
+    })
+
+    expect(text).toBe(`${Names.PANEL_SHOWN_TEXT}: 2 commits in origin/main..HEAD`)
+    expect(world.opened).toEqual([Names.PANE_ID])
+  })
+
   test('/commits lists the branch, selects the newest, draws its diff', async ($, on) => {
     const world = worldOf(on)
 

@@ -10,6 +10,7 @@ import type {
   PromptEditInput,
   PromptFillArgs,
   PromptFilled,
+  RenderSurface,
   ToolSpec,
   UiFocusArgs,
   UiFocusResult,
@@ -54,6 +55,7 @@ type Host = {
   registerTool: (spec: ToolSpec) => Promise<{ tool: string }>
   focus: (args: UiFocusArgs) => Promise<UiFocusResult>
   panes: () => Promise<readonly UiPane[]>
+  surfaces: () => Promise<readonly RenderSurface[]>
   promptRead: () => Promise<PromptBox>
   promptFill: (args: PromptFillArgs) => Promise<PromptFilled>
 }
@@ -904,6 +906,7 @@ export function register(on: On) {
       registerTool: spec => $.tool.register(spec),
       focus: args => $.ui.focus(args),
       panes: () => $.ui.panes(),
+      surfaces: () => $.session.surfaces(),
       promptRead: () => $.prompt.read(),
       promptFill: args => $.prompt.fill(args),
     }
@@ -958,6 +961,19 @@ export function register(on: On) {
     await syncBox(engine, 'all')
   }
 
+  /**
+   * Whether a remote surface that docks the pane draws the session.
+   * `presentation.isFullscreen` reports the terminal's layout alone, and is
+   * false in a session the desktop app runs. The roster is read on each call
+   * rather than kept from `session.attach`, which a reloaded module never sees.
+   * Mobile draws no pane.
+   */
+  async function hasDockingSurface(engine: Host): Promise<boolean> {
+    const surfaces = await engine.surfaces()
+
+    return surfaces.some(surface => surface !== 'terminal' && surface !== 'mobile')
+  }
+
   // A literal, not Names.COMMAND_NAME: the engine's scan reads literal names here to decide which
   // slash commands typed at startup must wait for this module, and a constant it cannot read makes
   // every early command wait.
@@ -968,7 +984,7 @@ export function register(on: On) {
 
     const engine = host
 
-    if (!e.presentation.isFullscreen) {
+    if (!e.presentation.isFullscreen && !(await hasDockingSurface(engine))) {
       return { text: Names.NEEDS_FULLSCREEN_TEXT }
     }
 
