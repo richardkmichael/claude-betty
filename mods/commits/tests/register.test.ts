@@ -10,6 +10,7 @@ import type {
 import { describe, expect, mock, test, tier } from 'claude-code/testing'
 import type { Engine, Mounted } from 'claude-code/testing'
 
+import { RANGE_END_MARK, RANGE_RULE, gutterOf } from '../hooks/diff-client'
 import * as Names from '../hooks/names'
 import {
   commitReferenceDecorationsOf,
@@ -856,6 +857,21 @@ describe('register', () => {
     expect(only?.context?.[0]).not.toContain('@@')
 
     await ui.unmount()
+  })
+
+  test('an included range is marked at its ends, with a dashed rule between', async () => {
+    const included = [{ from: 3, to: 6 }, { from: 9, to: 9 }]
+
+    expect([2, 3, 4, 5, 6, 7, 9].map(at => gutterOf(at, included))).toEqual([
+      '  ',
+      RANGE_END_MARK,
+      RANGE_RULE,
+      RANGE_RULE,
+      RANGE_END_MARK,
+      '  ',
+      RANGE_END_MARK,
+    ])
+    expect(gutterOf(4, [{ from: 4, to: 5 }]), 'two lines are both ends').toBe(RANGE_END_MARK)
   })
 
   test('including the whole commit drops its included lines and turns the mark green', async ($, on) => {

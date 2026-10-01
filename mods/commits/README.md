@@ -56,10 +56,10 @@ the box or send first.
 
 The selected commit's message and diff are drawn in a region of the pane's
 own (a `Client` element, terminal and desktop only). Dragging over lines
-there includes that range: the lines get `⧉` in the region's gutter, the
-commit's row gets a yellow `⧉` (green once the whole commit is included,
-which also drops its ranges), and `[⧉ <sha>:<from>-<to>]` is appended to the
-prompt box. A click on an included range excludes it; a click elsewhere only
+there includes that range: the range's first and last lines get `⧉` in
+the region's gutter and the lines between a dim `┊`, the commit's row gets
+a yellow `⧉` (green once the whole commit is included, which also drops its
+ranges), and `[⧉ <sha>:<from>-<to>]` is appended to the prompt box. A click on an included range excludes it; a click elsewhere only
 gives the region the keys. While the region holds them: `f` `b` PgUp PgDn
 page it and `j` `k` scroll it a line, Tab, Shift+Tab and ↑ ↓ move between
 commits, `a` includes or excludes the selected commit, and the keys stay in

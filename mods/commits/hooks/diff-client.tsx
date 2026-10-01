@@ -58,9 +58,30 @@ type State = {
 
 const IDLE: State = { anchor: null, focus: null, isDrag: false }
 
-/** The gutter before each line: the included mark or its blank. */
-const INCLUDED_MARK = '⧉ '
+/**
+ * The gutter before each line: the included mark on an included range's
+ * first and last lines, a dashed rule on the lines between, or blank.
+ */
+export const RANGE_END_MARK = '⧉ '
+export const RANGE_RULE = '┊ '
 const NO_MARK = '  '
+
+/**
+ * The gutter drawn before a content line.
+ *
+ * @param at the line's index in the content
+ * @param included the included ranges of the selected commit
+ * @returns the gutter's text, two columns
+ */
+export function gutterOf(at: number, included: readonly LineRange[]): string {
+  const ranges = included.filter(range => at >= range.from && at <= range.to)
+
+  if (ranges.length === 0) {
+    return NO_MARK
+  }
+
+  return ranges.some(range => at === range.from || at === range.to) ? RANGE_END_MARK : RANGE_RULE
+}
 
 let current: DiffClientProps = { offset: 0, lines: [], included: [] }
 
@@ -95,11 +116,16 @@ const diffClient: ClientModule<DiffClientProps, State> = (props, surface) => {
   const rows: RenderElement[] = props.lines.map((line, index) => {
     const at = props.offset + index
     const isDragged = dragged !== null && at >= dragged.from && at <= dragged.to
-    const isIncluded = props.included.some(range => at >= range.from && at <= range.to)
+    const gutter = gutterOf(at, props.included)
 
     return (
       <Box flexDirection="row">
-        <Text color="cyan">{isIncluded ? INCLUDED_MARK : NO_MARK}</Text>
+        <Text
+          color="cyan"
+          {...(gutter === RANGE_RULE ? { dimColor: true } : {})}
+        >
+          {gutter}
+        </Text>
         <Text
           wrap="truncate-end"
           {...(isDragged ? { inverse: true } : {})}
