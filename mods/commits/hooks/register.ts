@@ -143,14 +143,29 @@ export function linesCommitReferenceOf(short: string, range: LineRange): string 
 
 /** The shape of every commit reference: the mark, then what it names. */
 function commitReferenceTextOf(inner: string): string {
-  return `[⧉ ${inner}]`
+  return `⧉ ${inner}`
 }
 
-/** Any of this plugin's commit references in the text, with the space after it. */
-const COMMIT_REFERENCE_PATTERN = /\[⧉ [^\]\n]*\] ?/g
+/**
+ * Any of this plugin's commit references in the text, with the space after
+ * it. A reference has no closing mark, so one followed by more of a sha, a
+ * colon or a digit is not matched there: `⧉ abc1234:9-10` is not found
+ * inside `⧉ abc1234:9-100`.
+ */
+const COMMIT_REFERENCE_PATTERN = /⧉ [0-9a-f]+(:\d+-\d+)?(?![\w:-]) ?/g
 
 /** The theme colour the composer draws the native diff selection's pill in. */
 const COMMIT_REFERENCE_COLOR = 'ide'
+
+/**
+ * The commit references standing whole in the text, in order.
+ *
+ * @param text the prompt's text
+ * @returns the commit references, without the space after each
+ */
+export function commitReferencesIn(text: string): string[] {
+  return [...text.matchAll(COMMIT_REFERENCE_PATTERN)].map(match => match[0].trimEnd())
+}
 
 /**
  * The runs that paint each of the given commit references in the text in the
@@ -564,7 +579,7 @@ export function register(on: On) {
    */
   function reconcileIncluded(engine: Host, text: string) {
     const gone = [...included.values()].filter(
-      entry => entry.isWritten && !text.includes(entry.commitReference),
+      entry => entry.isWritten && !commitReferencesIn(text).includes(entry.commitReference),
     )
 
     if (gone.length > 0) {
@@ -954,7 +969,7 @@ export function register(on: On) {
 
     for (const entry of included.values()) {
       const commitReference = entry.commitReference
-      const isKept = !entry.isWritten || text.includes(commitReference)
+      const isKept = !entry.isWritten || commitReferencesIn(text).includes(commitReference)
 
       if (isKept) {
         text = withoutCommitReference(text, commitReference)
@@ -1039,7 +1054,9 @@ function postOf(data: unknown): DiffClientPost | null {
  * @returns the text without it
  */
 export function withoutCommitReference(text: string, commitReference: string): string {
-  return text.split(`${commitReference} `).join('').split(commitReference).join('')
+  return text.replace(COMMIT_REFERENCE_PATTERN, match =>
+    match.trimEnd() === commitReference ? '' : match,
+  )
 }
 
 /**

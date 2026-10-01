@@ -15,7 +15,9 @@ import * as Names from '../hooks/names'
 import {
   commitReferenceDecorationsOf,
   commitReferenceOf,
+  commitReferencesIn,
   linesCommitReferenceOf,
+  withoutCommitReference,
 } from '../hooks/register'
 
 tier('user')
@@ -572,7 +574,7 @@ describe('register', () => {
 
     expect(included).toContain('❯ ⧉ aaaaaaa Add the pane')
     expect(included, 'the help text does not change').toContain(Names.ASK_LABEL)
-    expect(world.box.text, 'the short sha alone names the commit').toBe('[⧉ aaaaaaa] ')
+    expect(world.box.text, 'the short sha alone names the commit').toBe('⧉ aaaaaaa ')
 
     await $.ui.press({ plugin: Names.PLUGIN_NAME, key: 'list-down' })
     await world.clock.settle()
@@ -612,11 +614,23 @@ describe('register', () => {
 
   test('only the commit references named are painted, wherever they sit', async () => {
     const mine = commitReferenceOf('aaaaaaa')
-    const text = `see ${mine} and [⧉ zzzzzzz] too`
+    const text = `see ${mine} and ⧉ fffffff too`
 
     expect(commitReferenceDecorationsOf(text, new Set([mine]))).toEqual([
       { start: 4, end: 4 + mine.length, color: 'ide' },
     ])
+  })
+
+  test('a commit reference is found whole, never as the start of a longer one', async () => {
+    const short = linesCommitReferenceOf('aaaaaaa', { from: 9, to: 10 })
+    const long = linesCommitReferenceOf('aaaaaaa', { from: 9, to: 100 })
+    const whole = commitReferenceOf('aaaaaaa')
+    const text = `${long} ${short} why?`
+
+    expect(commitReferencesIn(text)).toEqual([long, short])
+    expect(commitReferencesIn(text), 'the whole commit is not named').not.toContain(whole)
+    expect(withoutCommitReference(text, short)).toBe(`${long} why?`)
+    expect(withoutCommitReference(text, whole), 'nothing to strip').toBe(text)
   })
 
   test('the prompt rides an included commit, once', async ($, on) => {

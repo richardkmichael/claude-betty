@@ -45,27 +45,28 @@ row. `ctrl+x tab` gives a pane the keys later; `ctrl+x x` closes one.
 | Esc                   | close the pane                                            |
 
 Pressing `a` includes the selected commit: the row gets a green `⧉` in the
-gutter and `[⧉ <sha>]` is appended to the prompt box at once, painted in the
-colour the engine gives the native diff selection's pill. The engine
-gives the keyboard to a non-empty composer, so `ctrl+x tab` returns to the
-pane. Pressing `a` again on an included commit excludes it and takes its
-commit reference out. Closing the pane keeps the commits included; reopening
-shows them marked. While a commit reference is in the box a slash command
-cannot be typed, as with the engine's own pasted-text placeholders; clear
-the box or send first.
+gutter and `⧉ <sha>` is appended to the prompt box at once, painted in the
+colour the engine gives the native diff selection's pill. The engine gives
+the keyboard to a non-empty composer, so `ctrl+x tab` returns to the pane.
+Pressing `a` again on an included commit excludes it and takes its commit
+reference out. Closing the pane keeps the commits included; reopening shows
+them marked. While a commit reference is in the box a slash command cannot
+be typed, as with the engine's own pasted-text placeholders; clear the box
+or send first.
 
 The selected commit's message and diff are drawn in a region of the pane's
 own (a `Client` element, terminal and desktop only). Dragging over lines
-there includes that range: the range's first and last lines get `⧉` in
-the region's gutter and the lines between a dim `┊`, the commit's row gets
-a yellow `⧉` (green once the whole commit is included, which also drops its
-ranges), and `[⧉ <sha>:<from>-<to>]` is appended to the prompt box. A click on an included range excludes it; a click elsewhere only
-gives the region the keys. While the region holds them: `f` `b` PgUp PgDn
-page it and `j` `k` scroll it a line, Tab, Shift+Tab and ↑ ↓ move between
-commits, `a` includes or excludes the selected commit, and the keys stay in
-the region through all of it, unlike `a` pressed on the pane's own ring,
-after which the composer takes them. Other typed letters go nowhere; Escape
-hands the keys back to the composer.
+there includes that range: the range's first and last lines get `⧉` in the
+region's gutter and the lines between a dim `┊`, the commit's row gets a
+yellow `⧉` (green once the whole commit is included, which also drops its
+ranges), and `⧉ <sha>:<from>-<to>` is appended to the prompt box. A click on
+an included range excludes it; a click elsewhere only gives the region the
+keys. While the region holds them: `f` `b` PgUp PgDn page it and `j` `k`
+scroll it a line, Tab, Shift+Tab and ↑ ↓ move between commits, `a` includes
+or excludes the selected commit, and the keys stay in the region through all
+of it, unlike `a` pressed on the pane's own ring, after which the composer
+takes them. Other typed letters go nowhere; Escape hands the keys back to
+the composer.
 
 When the prompt is sent, each included commit rides along as hidden context
 beginning `The user attached commit <sha>`: a `<commit>` element with the
