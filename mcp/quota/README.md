@@ -75,9 +75,10 @@ The server's instructions, which Claude Code shows the model at session start, s
 slow down for quota, since reaching a limit only pauses work until the reset and quota left unused
 at a reset is lost. Near a limit, it should start only work that will finish before it, and it
 should ask first if the seven-day window would run out. Quota used by other sessions or other
-machines is normal, and the model is told not to investigate it. A subagent that stops early
-because of quota is told to say so in its final report. A running session picks up changed
-instructions when its server reconnects.
+machines is normal, and the model is told not to investigate it. They explain that quota is spent
+by model requests, so waiting on a build costs nothing. A subagent that stops early because of
+quota is told to say so in its final report. A running session picks up changed instructions when
+its server reconnects.
 
 ## Notices
 

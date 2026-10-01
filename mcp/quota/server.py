@@ -74,6 +74,11 @@ whole spans several five-hour windows is normal. The rates count every session o
 including other sessions and other machines you cannot see. Use you did not cause is normal: plan
 around it, and do not investigate it.
 
+Quota is spent by model requests, not by time. Each request re-sends the whole context, so a large
+context, large tool output and parallel agents cost the most. Time spent waiting on builds, tests
+or other processes costs nothing. A limit pauses only the model; processes already running carry
+on. context in the answer is the calling conversation's own.
+
 Before starting new work, estimate how long it will take, and compare that with the smallest
 in_minutes in exhaustion_at_last_2_min_rate, shortened for the work you are about to add, since
 each extra parallel agent raises the rate. Then:
