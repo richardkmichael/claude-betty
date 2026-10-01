@@ -91,6 +91,10 @@ chord to the pane drawn last.
 
 ## Limits of the prototype
 
+- While the pane's ring holds the keys, Space, Backspace and any other key
+  the pane does not use go to the composer and take the keys with them;
+  `ctrl+x tab` returns to the pane. The engine's `abovePrompt:focus` action
+  can be bound to a single chord in `~/.claude/keybindings.json`.
 - On the main screen (`CLAUDE_CODE_NO_FLICKER=0`) `/commits` says so and opens
   nothing. In the fullscreen layout the engine docks the pane beside the
   transcript from 110 columns and seats it inline above the prompt below that.
