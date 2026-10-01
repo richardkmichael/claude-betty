@@ -2,6 +2,7 @@ import type {
   Args,
   CommandRunInput,
   On,
+  PromptDecoration,
   RenderInput,
   SessionStartInput,
   UiScrollInput,
@@ -10,7 +11,11 @@ import { describe, expect, mock, test, tier } from 'claude-code/testing'
 import type { Engine, Mounted } from 'claude-code/testing'
 
 import * as Names from '../hooks/names'
-import { linesCommitReferenceOf, commitReferenceOf } from '../hooks/register'
+import {
+  commitReferenceDecorationsOf,
+  commitReferenceOf,
+  linesCommitReferenceOf,
+} from '../hooks/register'
 
 tier('user')
 
@@ -112,7 +117,12 @@ function worldOf(
   const closed: string[] = []
   const focused: (string | undefined)[] = []
   const scrolled: number[] = []
-  const box = { text: '', cursor: 0, isRefusing: false }
+  const box = {
+    text: '',
+    cursor: 0,
+    isRefusing: false,
+    decorations: [] as readonly PromptDecoration[],
+  }
   const submitted: { text: string; context: readonly string[] | undefined }[] = []
   const clock = mock.clock(on)
 
@@ -178,6 +188,7 @@ function worldOf(
           ? `${box.text.slice(0, box.cursor)}${e.text}${box.text.slice(box.cursor)}`
           : e.text
     box.cursor = box.text.length
+    box.decorations = e.decorations ?? []
 
     return { isFilled: true }
   })
@@ -564,6 +575,40 @@ describe('register', () => {
     expect(world.box.text).toBe(`${commitReferenceOf('aaaaaaa')} ${commitReferenceOf('bbbbbbb')} `)
     expect(textOf(await $.ui.render(FOCUSED_PANE))).toContain('  ⧉ aaaaaaa Add the pane')
     expect(textOf(await $.ui.render(FOCUSED_PANE))).toContain('❯ ⧉ bbbbbbb Start the plugin')
+  })
+
+  test('every written commit reference is painted in the native pill colour, its space not', async ($, on) => {
+    const world = await openedWorldOf($, on)
+    const first = commitReferenceOf('aaaaaaa')
+    const second = commitReferenceOf('bbbbbbb')
+    await $.ui.render(FOCUSED_PANE)
+
+    await $.ui.press({ plugin: Names.PLUGIN_NAME, key: 'ask' })
+    await world.clock.settle()
+
+    expect(world.box.decorations).toEqual([{ start: 0, end: first.length, color: 'ide' }])
+
+    await $.ui.press({ plugin: Names.PLUGIN_NAME, key: 'list-down' })
+    await world.clock.settle()
+    await $.ui.render(FOCUSED_PANE)
+    await $.ui.press({ plugin: Names.PLUGIN_NAME, key: 'ask' })
+    await world.clock.settle()
+
+    const secondStart = first.length + 1
+
+    expect(world.box.decorations, 'a fill replaces the runs, so both are painted').toEqual([
+      { start: 0, end: first.length, color: 'ide' },
+      { start: secondStart, end: secondStart + second.length, color: 'ide' },
+    ])
+  })
+
+  test('only the commit references named are painted, wherever they sit', async () => {
+    const mine = commitReferenceOf('aaaaaaa')
+    const text = `see ${mine} and [⧉ zzzzzzz] too`
+
+    expect(commitReferenceDecorationsOf(text, new Set([mine]))).toEqual([
+      { start: 4, end: 4 + mine.length, color: 'ide' },
+    ])
   })
 
   test('the prompt rides an included commit, once', async ($, on) => {

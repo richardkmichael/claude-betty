@@ -6,6 +6,7 @@ import type {
   ProcessRunInit,
   ProcessRunResult,
   PromptBox,
+  PromptDecoration,
   PromptFillArgs,
   PromptFilled,
   ToolSpec,
@@ -146,6 +147,31 @@ function commitReferenceTextOf(inner: string): string {
 
 /** Any of this plugin's commit references in the text, with the space after it. */
 const COMMIT_REFERENCE_PATTERN = /\[⧉ [^\]\n]*\] ?/g
+
+/** The theme colour the composer draws the native diff selection's pill in. */
+const COMMIT_REFERENCE_COLOR = 'ide'
+
+/**
+ * The runs that paint each of the given commit references in the text in the
+ * native pill's colour, the space after one left unpainted.
+ *
+ * @param text the prompt's text
+ * @param commitReferences the commit references to paint
+ * @returns the runs, in the text's order
+ */
+export function commitReferenceDecorationsOf(
+  text: string,
+  commitReferences: ReadonlySet<string>,
+): PromptDecoration[] {
+  return [...text.matchAll(COMMIT_REFERENCE_PATTERN)].flatMap(match => {
+    const commitReference = match[0].trimEnd()
+    const start = match.index ?? 0
+
+    return commitReferences.has(commitReference)
+      ? [{ start, end: start + commitReference.length, color: COMMIT_REFERENCE_COLOR }]
+      : []
+  })
+}
 
 /**
  * Registers the commits pane: `/commits` and the model's `show` tool open
@@ -504,12 +530,15 @@ export function register(on: On) {
 
     const appended = pending.map(entry => `${entry.commitReference} `).join('')
     const lead = appended === '' || kept === '' || /\s$/.test(kept) ? '' : ' '
+    const text = `${kept}${lead}${appended}`
 
-    const filled = await engine.promptFill(
-      kept === box.text
-        ? { text: `${lead}${appended}`, mode: 'append' }
-        : { text: `${kept}${lead}${appended}`, mode: 'replace' },
-    )
+    // The whole text is written, not only what is appended, so the runs
+    // repaint every commit reference: a fill's runs replace the last ones.
+    const filled = await engine.promptFill({
+      text,
+      mode: 'replace',
+      decorations: commitReferenceDecorationsOf(text, commitReferences),
+    })
 
     if (filled.isFilled) {
       for (const entry of pending) {
@@ -877,11 +906,22 @@ export function register(on: On) {
   on('prompt.edit', async ($, e, next) => {
     const box = await next(e)
 
-    if (host && hasWritten()) {
-      reconcileIncluded(host, box.text)
+    if (!host || !hasWritten()) {
+      return box
     }
 
-    return box
+    reconcileIncluded(host, box.text)
+
+    // Each edit's answer replaces the runs the box paints, so the commit
+    // references are painted again on every edit.
+    const written = new Set(
+      [...included.values()].filter(entry => entry.isWritten).map(entry => entry.commitReference),
+    )
+
+    return {
+      ...box,
+      decorations: [...(box.decorations ?? []), ...commitReferenceDecorationsOf(box.text, written)],
+    }
   })
 
   on('prompt.submit', async ($, e, next) => {

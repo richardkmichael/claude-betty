@@ -43,7 +43,8 @@ row. `ctrl+x tab` gives a pane the keys later; `ctrl+x x` closes one.
 | Esc                  | close the pane                                            |
 
 Pressing `a` includes the selected commit: the row gets a green `⧉` in the
-gutter and `[⧉ <sha>]` is appended to the prompt box at once. The engine
+gutter and `[⧉ <sha>]` is appended to the prompt box at once, painted in the
+colour the engine gives the native diff selection's pill. The engine
 gives the keyboard to a non-empty composer, so `ctrl+x tab` returns to the
 pane. Pressing `a` again on an included commit excludes it and takes its
 commit reference out. Closing the pane keeps the commits included; reopening
