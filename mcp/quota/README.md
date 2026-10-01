@@ -5,7 +5,8 @@ how fast it is being spent, so that it can decide what work to start. It reports
 seven-day plan windows and any per-model weekly windows, each with the percentage used, the reset
 time, and the rate of use over the last 2, 10 and 20 minutes. A forecast lists every window with the
 minutes until it runs out if the last 2 minutes' rate continues, beside the minutes until it resets.
-The longer spans show whether that rate is a burst or steady.
+The longer spans show whether that rate is a burst or steady. A companion hook, `notice.py`, tells
+the model when a window passes 90%, 95% or 99%, without waiting for it to call the tool.
 
 The data is what the status line shows. The server fetches nothing: it reads what
 `statusline/statusline.py` records on every render, as described in `statusline/RECORDING.md`.
@@ -74,8 +75,21 @@ The server's instructions, which Claude Code shows the model at session start, s
 slow down for quota, since reaching a limit only pauses work until the reset and quota left unused
 at a reset is lost. Near a limit, it should start only work that will finish before it, and it
 should ask first if the seven-day window would run out. Quota used by other sessions or other
-machines is normal, and the model is told not to investigate it. A running session picks up
-changed instructions when its server reconnects.
+machines is normal, and the model is told not to investigate it. A subagent that stops early
+because of quota is told to say so in its final report. A running session picks up changed
+instructions when its server reconnects.
+
+## Notices
+
+The model calls `get-quota` before starting work, not while the work runs. `notice.py`, a
+`PostToolUse` and `UserPromptSubmit` hook, checks the recording on every tool call and prompt, and
+when a window passes 90%, 95% or 99% it adds a note to the model's context: a line naming the window
+and the threshold, followed by `get-quota`'s answer.
+
+Each conversation is told once per threshold per window. The main conversation and every subagent
+are told separately, since each acts on its own work. A subagent can be reached only this way:
+while a foreground subagent runs, the main conversation makes no tool calls. A window that resets
+starts over. The check takes a few tens of milliseconds and runs the server only on a crossing.
 
 ## Requirements
 
@@ -84,6 +98,7 @@ changed instructions when its server reconnects.
   the top-level README, and "Other recorders" below.
 - `uv`, which runs `server.py` with its one dependency, the MCP Python SDK.
 - The `PreToolUse` hook in `hook.py`, which passes the calling session's ID to the tool.
+- Optionally, the `notice.py` hook for notices.
 
 ## Installation
 
@@ -93,7 +108,8 @@ Register the server under the name `quota`, since the hook's matcher below depen
 claude mcp add --scope user quota -- uv run --script "$PWD/mcp/quota/server.py"
 ```
 
-Add the hook to `~/.claude/settings.json`, with the path to your checkout:
+Add the hooks to `~/.claude/settings.json`, with the path to your checkout. The second and third
+entries are the notices:
 
 ```json
 {
@@ -103,6 +119,12 @@ Add the hook to `~/.claude/settings.json`, with the path to your checkout:
         "matcher": "mcp__quota__get-quota",
         "hooks": [{ "type": "command", "command": "python /path/to/mcp/quota/hook.py" }]
       }
+    ],
+    "PostToolUse": [
+      { "hooks": [{ "type": "command", "command": "python /path/to/mcp/quota/notice.py" }] }
+    ],
+    "UserPromptSubmit": [
+      { "hooks": [{ "type": "command", "command": "python /path/to/mcp/quota/notice.py" }] }
     ]
   }
 }

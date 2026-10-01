@@ -87,7 +87,13 @@ each extra parallel agent raises the rate. Then:
 
 A window's guidance field, when present, says which of these applies to it. Check the 2-minute
 rate against the 10- and 20-minute rates before acting on it: one whole-percent step can make the
-2-minute rate look like a burst."""
+2-minute rate look like a burst.
+
+When a window passes 90%, 95% or 99%, a note headed [quota] arrives after a tool call or with the
+user's next message, carrying this answer. Act on it as above, then carry on.
+
+In a subagent, the work is the rest of your task. If you stop early or narrow the task because of
+quota, say so in your final report: what is done, what is left, and when the window resets."""
 
 app = MCPServer("quota", instructions=INSTRUCTIONS)
 

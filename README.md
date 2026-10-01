@@ -62,7 +62,8 @@ Claude Code. Each component is self-contained and installed independently.
 - `quota` — a `get-quota` tool that tells Claude how much plan quota is left and how fast it is
   being spent. Claude Code passes quota data only to the status line command, so `statusline.py`
   writes it and the server only reads it. It needs that script as the status line command, drawing
-  or `--record-only`. A `PreToolUse` hook passes it the calling session's ID.
+  or `--record-only`. A `PreToolUse` hook passes it the calling session's ID, and a second hook
+  tells Claude when a window passes 90%, 95% or 99%.
 
 ## Installation
 
