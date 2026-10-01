@@ -86,6 +86,9 @@ prompt that held only commit references is sent as `See the attached
 commit.` `/clear` and `/resume` forget everything and take the commit
 references out.
 
+In the prompt box a commit reference is edited like other text, except
+that ← and → stop at a reference's edge instead of stepping into it.
+
 The ctrl+↑/↓ chords are the engine's diff-list actions, declared on two
 empty buttons; with the built-in diff pane open too, the engine gives the
 chord to the pane drawn last.

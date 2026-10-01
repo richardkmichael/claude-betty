@@ -17,6 +17,7 @@ import {
   commitReferenceOf,
   commitReferencesIn,
   linesCommitReferenceOf,
+  referenceEditOf,
   withoutCommitReference,
 } from '../hooks/register'
 
@@ -634,6 +635,19 @@ describe('register', () => {
     expect(commitReferencesIn(text), 'the whole commit is not named').not.toContain(whole)
     expect(withoutCommitReference(text, short)).toBe(`${long} why?`)
     expect(withoutCommitReference(text, whole), 'nothing to strip').toBe(text)
+  })
+
+  test('an arrow that would land inside a commit reference lands at its edge', async () => {
+    const whole = commitReferenceOf('bbbbbbb')
+    const text = `see ${whole} here`
+    const start = text.indexOf(whole)
+    const end = start + whole.length
+    const moveTo = (cursor: number, at: number) => ({ text, cursor, start: at, end: at, inputText: '' })
+    const written = new Set([whole])
+
+    expect(referenceEditOf(moveTo(start, start + 1), written), '→ jumps past it').toEqual({ kind: 'move', at: end })
+    expect(referenceEditOf(moveTo(end, end - 1), written), '← jumps before it').toEqual({ kind: 'move', at: start })
+    expect(referenceEditOf(moveTo(end, end + 1), written), 'outside it').toBeNull()
   })
 
   test('the prompt rides an included commit, once', async ($, on) => {

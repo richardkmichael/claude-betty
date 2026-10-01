@@ -156,6 +156,69 @@ function commitReferenceTextOf(inner: string): string {
 const COMMIT_REFERENCE_PATTERN = /⧉ [0-9a-f]+(:\d+-\d+)?(?![\w:-]) ?/g
 
 /**
+ * One commit reference where it stands in the prompt's text: from its mark to
+ * the end of what it names, the end past the space after it, and where its
+ * commit's sha ends (before `:<from>-<to>` for a range of lines).
+ */
+type ReferenceSpan = {
+  commitReference: string
+  start: number
+  end: number
+  spanEnd: number
+  shaEnd: number
+}
+
+function referenceSpansIn(text: string): ReferenceSpan[] {
+  return [...text.matchAll(COMMIT_REFERENCE_PATTERN)].map(match => {
+    const start = match.index ?? 0
+    const commitReference = match[0].trimEnd()
+    const end = start + commitReference.length
+
+    return {
+      commitReference,
+      start,
+      end,
+      spanEnd: start + match[0].length,
+      shaEnd: end - (match[1]?.length ?? 0),
+    }
+  })
+}
+
+/**
+ * What an edit of the prompt box does to the written commit references
+ * instead of what it would: an arrow that would land inside one lands at its
+ * edge, before it moving left and after it moving right. Every other edit is
+ * left alone, null.
+ */
+export type ReferenceEdit = { kind: 'move'; at: number }
+
+/**
+ * The reference edit an edit of the prompt box makes, if any.
+ *
+ * @param edit the edit, as `prompt.edit` receives it
+ * @param written the commit references written in the box
+ * @returns the reference edit, or null for an ordinary edit
+ */
+export function referenceEditOf(
+  edit: { text: string; cursor: number; start: number; end: number; inputText: string },
+  written: ReadonlySet<string>,
+): ReferenceEdit | null {
+  const spans = referenceSpansIn(edit.text).filter(span => written.has(span.commitReference))
+
+  if (edit.inputText === '' && edit.start === edit.end && edit.start !== edit.cursor) {
+    const inside = spans.find(span => edit.start > span.start && edit.start < span.end)
+
+    if (!inside) {
+      return null
+    }
+
+    return { kind: 'move', at: edit.start < edit.cursor ? inside.start : inside.end }
+  }
+
+  return null
+}
+
+/**
  * The commit references standing whole in the text, in order.
  *
  * @param text the prompt's text
@@ -211,6 +274,7 @@ export function register(on: On) {
    * unwritten.
    */
   let hasPromptBox = true
+
   let model: PaneModel = EMPTY_MODEL
 
   const loads = new Map<string, Promise<void>>()
@@ -596,6 +660,12 @@ export function register(on: On) {
     return [...included.values()].some(entry => entry.isWritten)
   }
 
+  function writtenCommitReferences(): Set<string> {
+    return new Set(
+      [...included.values()].filter(entry => entry.isWritten).map(entry => entry.commitReference),
+    )
+  }
+
   async function closePane(engine: Host) {
     await engine.closePane({ id: Names.PANE_ID })
     isOpen = false
@@ -937,19 +1007,24 @@ export function register(on: On) {
   })
 
   on('prompt.edit', async ($, e, next) => {
-    const box = await next(e)
+    const engine = host
 
-    if (!host || !hasWritten()) {
-      return box
+    if (!engine || !hasWritten()) {
+      return next(e)
     }
 
-    reconcileIncluded(host, box.text)
+    const change = referenceEditOf(e, writtenCommitReferences())
+
+    // An arrow landing in a reference is answered without next: the cursor
+    // lands at the reference's edge.
+    const box: { text: string; cursor: number; decorations?: PromptDecoration[] } =
+      change === null ? await next(e) : { text: e.text, cursor: change.at }
+
+    reconcileIncluded(engine, box.text)
 
     // Each edit's answer replaces the runs the box paints, so the commit
     // references are painted again on every edit.
-    const written = new Set(
-      [...included.values()].filter(entry => entry.isWritten).map(entry => entry.commitReference),
-    )
+    const written = writtenCommitReferences()
 
     return {
       ...box,
