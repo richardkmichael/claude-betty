@@ -176,6 +176,8 @@ nothing and exits 0, which Claude Code treats the same as having no status line.
 "command": "~/.claude/statusline.py --record-only"
 ```
 
+Its tests run from the repository root with `uv run --with pytest pytest statusline/tests`.
+
 To combine it with another status line producer, pipe that producer into it:
 
 ```
