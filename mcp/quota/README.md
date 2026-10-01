@@ -12,6 +12,57 @@ The data is what the status line shows. The server fetches nothing: it reads wha
 When a recording has stopped being updated, the tool returns an error instead of a number, because
 a value that no longer moves reads as quota not being spent.
 
+## What it returns
+
+An answer for an account under heavy load, abridged:
+
+```json
+{
+  "account": "Work",
+  "plan_as_of": "2026-09-30T23:06:34+00:00",
+  "exhaustion_at_last_2_min_rate": {
+    "five_hour": { "in_minutes": 80, "resets_in_minutes": 284 },
+    "seven_day": { "in_minutes": null, "resets_in_minutes": 3353 },
+    "Fable": { "in_minutes": null, "resets_in_minutes": 3353 }
+  },
+  "plan": {
+    "five_hour": {
+      "used_percent": 20,
+      "resets_at": "2026-10-01T04:00:00+00:00",
+      "resets_at_local": "2026-09-30T21:00:00-07:00",
+      "resets_in_minutes": 284,
+      "percent_per_minute": { "last_2_min": 1.0, "last_10_min": 1.0, "last_20_min": 1.25 }
+    },
+    "seven_day": { "...": "the same fields" }
+  },
+  "models": {
+    "Fable": { "...": "the same fields", "fetched_seconds_ago": 21 }
+  }
+}
+```
+
+- `in_minutes` is `null` when the 2-minute rate is zero or not measured yet.
+- Rates are percentage points per minute, every span ending now. Percentages are whole numbers,
+  so the 2-minute rate moves in steps of half a point a minute.
+- `measured_minutes` appears only for a span that reaches back past the start of the window or of
+  the recording.
+- The answer is MCP structured content, with an `outputSchema` describing every field.
+
+When it cannot vouch for a figure, the tool returns an error that says why and what to do: the
+status line is not recording, its recording has gone stale, no quota data has arrived since the
+session started or since `/login`, or the data is still the previous login's. Per-model figures
+older than five minutes are left out with a note, as the status line shows `STL` for them.
+
+## How the model is told to use it
+
+The server's instructions, which Claude Code shows the model at session start, say to call
+`get-quota` before large or parallel work and when asked about quota. They tell the model never to
+slow down for quota, since reaching a limit only pauses work until the reset and quota left unused
+at a reset is lost. Near a limit, it should start only work that will finish before it, and it
+should ask first if the seven-day window would run out. Quota used by other sessions or other
+machines is normal, and the model is told not to investigate it. A running session picks up
+changed instructions when its server reconnects.
+
 ## Requirements
 
 - `statusline.py` running as the status line command, either drawing the line or with
