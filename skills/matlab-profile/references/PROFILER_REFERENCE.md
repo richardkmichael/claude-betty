@@ -1,7 +1,17 @@
 # MATLAB Profiler Reference
 
-Verified against R2025b on Apple Silicon. Every default was confirmed via `profile('status')`,
-not taken from documentation at face value.
+Covers the MATLAB R2025b profiler.
+
+Contents:
+
+- Verification methodology
+- Invocation, and the profiler actions
+- Configuration options: history, timer, detail level, memory options, settings that persist
+- Output structures: `profile('info')`, FunctionTable entries, how the per-function numbers
+  aggregate, `profile('status')`, the FunctionHistory event matrix
+- Measured overhead
+- Interpretation rules of thumb
+- Focused-profile recipes: snapshot-and-replay, a specific region, a smaller workload
 
 ## Verification methodology
 
@@ -13,11 +23,14 @@ disp(s);   % actual defaults on THIS machine
 ```
 
 Several published defaults are wrong for R2025b:
+
 - HistorySize default is 5,000,000 (not 10,000 as older references claim)
 - HistoryTracking defaults to 'timestamp' (not 'off')
 - Timer defaults to 'performance' (not 'cpu'; changed in R2015b)
 
-When unsure whether an option exists, probe `profile('status')` first rather than fabricating.
+`profile('status')` reports the current settings, not which options exist. When unsure
+whether an option exists, check MATLAB's documentation for `profile` (the `matlab-docs` skill)
+rather than guessing.
 
 ## Invocation
 
@@ -38,15 +51,15 @@ profile('on', '-detail', 'builtin', '-historysize', 2e7);
 
 ## Actions
 
-| Action   | Effect                                                                      |
-|----------|-----------------------------------------------------------------------------|
-| on       | Start profiler, clear prior statistics                                      |
-| off      | Stop profiler, keep statistics                                              |
-| resume   | Restart without clearing previously recorded statistics                     |
-| clear    | Stop and wipe statistics. Does NOT reset Timer/DetailLevel/HistorySize      |
-| viewer   | Stop and open GUI. Not supported in -batch mode                             |
-| info     | Stop and return result struct                                               |
-| status   | Return current settings (works whether profiler is on or off)               |
+| Action   | Effect                                                                 |
+|----------|------------------------------------------------------------------------|
+| on       | Start profiler, clear prior statistics                                 |
+| off      | Stop profiler, keep statistics                                         |
+| resume   | Restart without clearing previously recorded statistics                |
+| clear    | Stop and wipe statistics. Does NOT reset Timer/DetailLevel/HistorySize |
+| viewer   | Stop and open GUI. Not supported in -batch mode                        |
+| info     | Stop and return result struct                                          |
+| status   | Return current settings (works whether profiler is on or off)          |
 
 ## Configuration options
 
@@ -61,31 +74,31 @@ profile('on', '-detail', 'builtin', '-historysize', 2e7);
 
 ### History options
 
-| Option           | Effect                                                              | Default       |
-|------------------|---------------------------------------------------------------------|---------------|
-| -nohistory       | Aggregate stats only. FunctionHistory is empty.                     |               |
-| -history         | Aggregates + entry/exit sequence (no timestamps)                    |               |
-| -timestamp       | Aggregates + sequence + epoch timestamp per event                   | yes           |
-| -historysize N   | Bound event buffer to N entries. Overflow silently drops history    | 5,000,000     |
+| Option         | Effect                                            | Default   |
+|----------------|---------------------------------------------------|-----------|
+| -nohistory     | Aggregate stats only. FunctionHistory is empty.   |           |
+| -history       | Aggregates + entry/exit sequence (no timestamps)  |           |
+| -timestamp     | Aggregates + sequence + epoch timestamp per event | yes       |
+| -historysize N | Bound the event buffer to N entries               | 5,000,000 |
 
 History overflow is silent: aggregate stats keep accumulating but trace data stops.
 Check `size(info.FunctionHistory, 2)` against the cap after each run.
 
 ### Timer options
 
-| Option               | Effect                                                            | Default |
-|----------------------|-------------------------------------------------------------------|---------|
-| -timer 'performance' | OS wall-clock. Most reliable general choice.                      | yes     |
-| -timer 'processor'   | Direct processor clock. Can drift under power management.         |         |
-| -timer 'real'        | OS system time. Highest overhead. Affected by clock adjustments.  |         |
-| -timer 'cpu'         | CPU time summed across threads. For parallel comparison.          |         |
+| Option               | Effect                                                     | Default |
+|----------------------|------------------------------------------------------------|---------|
+| -timer 'performance' | OS wall-clock. Most reliable general choice.               | yes     |
+| -timer 'processor'   | Direct processor clock. Can drift under power management.  |         |
+| -timer 'real'        | OS system time. Highest overhead; clock-adjustment prone.  |         |
+| -timer 'cpu'         | CPU time summed across threads. For parallel comparison.   |         |
 
 ### Detail level
 
 | Option          | Effect                                                             | Default |
 |-----------------|--------------------------------------------------------------------|---------|
 | -detail mmex    | Track M-functions and MEX functions only                           | yes     |
-| -detail builtin | Also track built-in operators (*, +, speye, sparse, etc.)         |         |
+| -detail builtin | Also track built-in operators (*, +, speye, sparse, etc.)          |         |
 
 `-detail builtin` is undocumented but works in R2025b. Measured cost on a 500-iteration
 benchmark: indistinguishable wall-clock time, ~2x FunctionTable rows, ~26% more history events.
@@ -95,21 +108,41 @@ Use it by default.
 
 | Option       | Effect                                                               |
 |--------------|----------------------------------------------------------------------|
-| -memory on   | Track allocated/freed/peak memory per function. Significant overhead |
+| -memory on   | Track allocated/freed/peak memory per function. Large overhead       |
 | -nomemory    | Disable memory tracking (default)                                    |
 
-Use only when chasing a memory issue. When enabled, FunctionTable entries gain:
-- PeakMem: peak memory usage during the function (bytes)
-- TotalMemAllocated: total bytes allocated (bytes). Older sources call this AllocatedMemory.
-- TotalMemFreed: total bytes freed (bytes). Older sources call this FreedMemory.
+Use only when chasing a memory issue. The overhead is large: a loop of small calls ran 130x
+slower than under the time profiler. The figures can also miss temporaries created inside
+built-ins (32 MB of `rand` results did not appear in one test), so treat allocation totals as
+a lower bound. `profile('status')` does not report whether memory profiling was on;
+`export_profile_json` records it as `Settings.Memory`, from whether the FunctionTable carries
+the memory fields. Nor does it report the thread count, which `-singleCompThread` at startup
+or `maxNumCompThreads(n)` set and which changes how multithreaded built-ins time;
+`export_profile_json` records `maxNumCompThreads` of its own session as `Settings.Threads`.
 
-These fields are undocumented and the names varied historically. Detect with
-isfield(ft(i), 'TotalMemAllocated') and fall back to isfield(ft(i), 'AllocatedMemory').
-May be unreliable on some platforms.
+When enabled, FunctionTable entries gain:
+
+- PeakMem: the most memory live at any one instant during the function (bytes). A
+  high-water mark, so it is a maximum, not a running total.
+- TotalMemAllocated: cumulative bytes allocated over the function's run, counting
+  every allocation even if later freed (bytes). Older sources call this AllocatedMemory.
+- TotalMemFreed: cumulative bytes freed over the function's run (bytes). Older
+  sources call this FreedMemory.
+
+All three are INCLUSIVE (function plus its callees) and summed across every call to
+the function, except PeakMem, which takes the maximum rather than summing. See "How
+the per-function numbers aggregate" below.
+
+These fields are undocumented and the names varied historically. Detect the modern
+name with isfield(ft(i), 'TotalMemAllocated') and fall back to
+isfield(ft(i), 'AllocatedMemory'). When -memory on works, a profile carries all three
+together (verified), and they are not emitted singly, so a reader that finds PeakMem
+can rely on TotalMemAllocated/TotalMemFreed too. Where -memory on is unavailable the
+fields are absent entirely, not partially: the only cases are all three or none.
 
 Note: `-memory on` cannot be combined with an action in a single profile() call.
 Use `profile('-memory', 'on', '-detail', 'builtin', '-historysize', 2e7)` as a
-single configure-and-start invocation — NOT `profile('on', '-memory', 'on', ...)`,
+single configure-and-start invocation, NOT `profile('on', '-memory', 'on', ...)`,
 which errors with "Only one profiler action is supported per call."
 
 ### Critical gotcha: settings persist
@@ -122,39 +155,75 @@ Always set options explicitly or start a new MATLAB session.
 
 ### profile('info') top-level fields
 
-| Field           | Meaning                                                                  |
-|-----------------|--------------------------------------------------------------------------|
-| FunctionTable   | Struct array, one entry per function observed                            |
-| FunctionHistory | Event matrix. 2xE (history) or 4xE (timestamp)                          |
-| ClockPrecision  | Timer resolution in seconds (~3.3e-7 for performance timer)             |
-| ClockSpeed      | Estimated CPU clock speed in Hz                                          |
-| Name            | 'MATLAB' (constant)                                                      |
-| Overhead        | Reserved for future use. Always 0; ignore                                |
+| Field           | Meaning                                                     |
+|-----------------|-------------------------------------------------------------|
+| FunctionTable   | Struct array, one entry per function observed               |
+| FunctionHistory | Event matrix. 2xE (history) or 4xE (timestamp)              |
+| ClockPrecision  | Timer resolution in seconds (~3.3e-7 for performance timer) |
+| ClockSpeed      | Estimated CPU clock speed in Hz                             |
+| Name            | 'MATLAB' (constant)                                         |
+| Overhead        | Reserved for future use. Always 0; ignore                   |
 
 ### FunctionTable entry fields
 
-| Field              | Meaning                                                                |
-|--------------------|------------------------------------------------------------------------|
-| CompleteName       | Full dotted path (e.g., decomposition>decomposition.mldivide)          |
-| FunctionName       | Short name                                                             |
-| FileName           | Absolute path to .m file                                               |
-| Type               | 'M-function', 'M-subfunction', 'MEX-function', 'Built-in', etc.       |
-| NumCalls           | Total invocations                                                      |
-| TotalTime          | INCLUSIVE time (this function + all children). NOT self-time.           |
-| TotalRecursiveTime | Deprecated, unused                                                     |
-| Children           | Struct array: {Index, NumCalls, TotalTime} per direct child            |
-| Parents            | Struct array: {Index, NumCalls} per caller                             |
-| ExecutedLines      | Nx3 matrix: [line_number, hit_count, time_seconds]                     |
-| IsRecursive        | Logical                                                                |
-| PartialData        | Logical. True if function was edited/cleared mid-profile               |
+| Field              | Meaning                                                         |
+|--------------------|-----------------------------------------------------------------|
+| CompleteName       | Full dotted path (e.g., decomposition>decomposition.mldivide)   |
+| FunctionName       | Short name                                                      |
+| FileName           | Absolute path to .m file                                        |
+| Type               | 'M-function', 'M-subfunction', 'MEX-function', 'Built-in', etc. |
+| NumCalls           | Total invocations                                               |
+| TotalTime          | INCLUSIVE time (this function + all children). NOT self-time.   |
+| TotalRecursiveTime | Deprecated, unused                                              |
+| Children           | Struct array: {Index, NumCalls, TotalTime} per direct child     |
+| Parents            | Struct array: {Index, NumCalls} per caller                      |
+| ExecutedLines      | Nx3 [line, hits, time]; Nx6 with -memory on (see note below)    |
+| IsRecursive        | Logical                                                         |
+| PartialData        | Logical. True if function was edited/cleared mid-profile        |
 
 Important nuances:
-- TotalTime is INCLUSIVE. Self-time must be computed:
-  self = TotalTime - sum(child.TotalTime * child.NumCalls / Children(child).NumCalls)
+
+- TotalTime is INCLUSIVE. Compute self-time from the per-parent child times the
+  profiler already records in the Children array:
+  self = TotalTime - sum(Children.TotalTime)
+  Each Children(k).TotalTime is the time spent in that child as called from this
+  function (per-parent), not the child's global TotalTime, so no call-count
+  scaling is needed. (Verified: the per-parent child times across a function's
+  callers sum to that child's global TotalTime.)
 - Sum of ExecutedLines time does NOT necessarily equal TotalTime.
   The difference is time in built-in operators not line-attributed
   (unless -detail builtin was used).
+- Under -memory on, ExecutedLines gains three columns:
+  [line, hits, time, allocated, freed, peak] (the last three in bytes). This
+  gives per-LINE memory attribution, not just per-function.
 - CompleteName disambiguates subfunctions better than FunctionName.
+
+### How the per-function numbers aggregate
+
+Every per-function number (TotalTime, TotalMemAllocated, TotalMemFreed, PeakMem)
+is rolled up two ways at once:
+
+- Up the call tree (inclusive): a function's number includes everything its callees
+  did, not just its own work.
+- Across calls: a function called N times reports the figure summed over all N
+  invocations.
+
+TotalTime, TotalMemAllocated, and TotalMemFreed are sums under both roll-ups. PeakMem
+is a maximum (a high-water mark): the most memory live at any single instant during
+the function and its callees, taken across all its calls.
+
+Because each number already includes the callees, the whole-run total is the
+number of the frame that encloses the workload, NOT a sum down the table. Summing the
+table counts the same time or bytes once per stack level, multiplying by call depth. So:
+
+- For a wall-clock total, read the top-level WallTime (the tic/toc around the
+  workload), never the sum of TotalTime.
+- For a run's allocation, freed, or peak total, read the `run_profile>workload` row
+  (the driver's local function). The driver script's own row is larger: it also
+  counts `profile off` and `profile('info')`, measured at 20 MB of a 23 MB total on
+  a small workload.
+- For one function's own cost, use self-time: TotalTime minus the sum of its
+  Children.TotalTime (see the self-time note above).
 
 ### profile('status') fields
 
@@ -164,29 +233,28 @@ Important nuances:
 | DetailLevel      | 'mmex', 'builtin'                                   | 'mmex'        |
 | Timer            | 'performance', 'processor', 'cpu', 'real'           | 'performance' |
 | HistoryTracking  | 'on', 'off', 'timestamp'                            | 'timestamp'   |
-| HistorySize      | integer                                              | 5000000       |
+| HistorySize      | integer                                             | 5000000       |
 
 ### FunctionHistory event matrix
 
-4xE matrix (with -timestamp, the default):
-
-| Row | Meaning                                                |
-|-----|--------------------------------------------------------|
-| 1   | 0 = function entry, 1 = function exit                  |
-| 2   | Index into FunctionTable (1-based)                     |
-| 3   | Epoch seconds (integer part)                           |
-| 4   | Epoch microseconds (fractional part)                   |
+| Row | Meaning                               |
+|-----|---------------------------------------|
+| 1   | 0 = function entry, 1 = function exit |
+| 2   | Index into FunctionTable (1-based)    |
+| 3   | Epoch seconds (integer part)          |
+| 4   | Epoch microseconds (fractional part)  |
 
 Built-in functions do NOT appear in FunctionHistory under -detail mmex.
 Use -detail builtin to include them.
 
 What FunctionHistory reveals that FunctionTable cannot:
+
 - Per-iteration call patterns (slice by time range)
 - Call sequence verification (confirm assumed call trees)
 - Outlier identification (slow individual invocations hidden by averages)
 - Flame-graph construction (pair entries with exits via stack walk)
 
-## Measured overhead (M1, R2025b)
+## Measured overhead (Apple M1, R2025b)
 
 | Operation       | Without profiler | Under profiler | Overhead |
 |-----------------|------------------|----------------|----------|
@@ -199,27 +267,22 @@ On long-running workloads, profiler overhead is typically within system variance
 
 ## Interpretation rules of thumb
 
-1. Trust ordering and proportions on long runs (minutes). Distrust absolute per-call
-   times for micro-operations (<1 ms). Use tic/toc for those.
+1. Trust ordering and proportions on long runs (minutes). On short runs the per-call
+   overhead inflates instrumented functions called many times, and built-ins compiled
+   inline (`rand`, `sum`) may be missing from the table even with -detail builtin, so the
+   proportions mislead as well as the absolute times. Use timeit for those; it warms up
+   and returns the median over many runs, which raw tic/toc does not.
 2. For line-level attribution within a function, the profiler is the right tool
    regardless of workload size.
 3. Use CompleteName to disambiguate subfunctions and overloaded methods.
 4. Ignore the first few FunctionHistory events (loader/addpath). Focus on the
    time range corresponding to actual workload.
-5. History overflow is silent. Always check size(info.FunctionHistory, 2) against
-   the historysize cap.
 
-## Pass-planning heuristic
+## Focused-profile recipes
 
-After the first profile pass, decide whether to iterate:
-
-| First-pass outcome                              | Next step                                  |
-|-------------------------------------------------|--------------------------------------------|
-| Clean attribution, overhead <50%, history OK    | One pass enough. Analyze and act.          |
-| History buffer hit cap                          | Rerun with larger -historysize             |
-| Overhead >2x, hotspot in one function           | Snapshot-and-replay that function          |
-| Overhead >2x, spread across many functions      | Shrink workload (smaller fixture/fewer iterations) |
-| Only one iteration/region is interesting        | Add profile on/off hooks around that region |
+SKILL.md's "Follow-up passes" decides when to use these: Recipe A when one function
+dominates, Recipe B when only one iteration or region matters, Recipe C when the profiler
+overhead is spread across many functions.
 
 ### Snapshot-and-replay (Recipe A)
 
@@ -241,107 +304,16 @@ Add temporary hooks around the iteration of interest:
 
 ```matlab
 if iteration == target
-    profile clear; profile('on', '-detail', 'builtin', '-historysize', 2e7);
+    profile clear;
+    profile('on', '-detail', 'builtin', '-historysize', 2e7);
 end
 % ... body ...
 if iteration == target
-    profile off; info = profile('info');
+    profile off;
+    info = profile('info');
 end
 ```
 
 ### Shrink workload (Recipe C)
 
 Use a smaller input that still exercises the code paths of interest.
-
-## JSON export for Python analysis
-
-Serialize profile('info') to JSON, dropping FunctionHistory (too large):
-
-```matlab
-info = profile('info');
-ft = info.FunctionTable;
-funcs = cell(numel(ft), 1);
-for i = 1:numel(ft)
-    f = ft(i);
-    el = f.ExecutedLines;
-    linesCell = cell(size(el,1), 1);
-    for j = 1:size(el,1)
-        linesCell{j} = struct('line', el(j,1), 'hits', el(j,2), 'time', el(j,3));
-    end
-    funcs{i} = struct( ...
-        'FunctionName', f.FunctionName, 'FileName', f.FileName, ...
-        'Type', f.Type, 'NumCalls', f.NumCalls, ...
-        'TotalTime', f.TotalTime, 'TotalRecursiveTime', f.TotalRecursiveTime, ...
-        'PartialData', f.PartialData, 'ExecutedLines', {linesCell});
-end
-out = struct('Name', info.Name, 'ClockPrecision', info.ClockPrecision, ...
-    'ClockSpeed', info.ClockSpeed, 'NumFunctions', numel(ft), 'Functions', {funcs});
-fid = fopen('profile_output.json', 'w');
-fprintf(fid, '%s', jsonencode(out));
-fclose(fid);
-```
-
-## Python analysis patterns
-
-Rank functions by inclusive time:
-
-```python
-import json
-with open('profile_output.json') as f:
-    d = json.load(f)
-fns = sorted(d['Functions'], key=lambda f: -f['TotalTime'])
-for fn in fns[:15]:
-    c = fn['NumCalls']
-    u = 1e6 * fn['TotalTime'] / c if c else 0
-    print(f"{fn['TotalTime']:>10.3f}s  {c:>9d}  {u:>10.2f}us/call  {fn['FunctionName']}")
-```
-
-Per-line breakdown for a hot function:
-
-```python
-fn = fns[0]  # hottest function
-lines = sorted(fn['ExecutedLines'], key=lambda l: -l['time'])
-for l in lines[:10]:
-    u = 1e6 * l['time'] / l['hits'] if l['hits'] else 0
-    print(f"  line {l['line']:>4}  hits={l['hits']:>9}  time={l['time']:>9.2f}s  {u:>9.2f}us/hit")
-```
-
-Filter by function name pattern:
-
-```python
-for fn in fns:
-    n = fn['FunctionName'].lower()
-    if any(k in n for k in ['sparse', 'decomposition', 'mldivide']):
-        print(f"{fn['TotalTime']:>8.3f}s  {fn['NumCalls']:>9d}  {fn['FunctionName']}")
-```
-
-## FunctionHistory queries in MATLAB
-
-Flatten history into a table for filtering:
-
-```matlab
-info = load('profile_output.mat').info;
-
-H = info.FunctionHistory;
-nEvents = size(H, 2);
-ft = info.FunctionTable;
-
-% Build event table
-eventType = repmat("entry", nEvents, 1);
-eventType(H(1,:) == 1) = "exit";
-tableIndex = double(H(2,:))';
-epoch = H(3,:)' + H(4,:)' * 1e-6;
-tsec = epoch - epoch(1);
-
-fnNames = strings(numel(ft), 1);
-for i = 1:numel(ft), fnNames(i) = string(ft(i).FunctionName); end
-fnPerEvent = fnNames(tableIndex);
-
-events = table(tsec, eventType, fnPerEvent, tableIndex, ...
-    'VariableNames', {'Time', 'EventType', 'Function', 'TableIndex'});
-
-% Count calls in a time range
-slice = events(events.Time >= 50 & events.Time < 60, :);
-entries = slice(slice.EventType == "entry", :);
-groupcounts(entries, 'Function')
-```

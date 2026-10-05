@@ -8,6 +8,14 @@ function events = history_query(profileMatPath, fnNames)
     % Columns: Time, EventType (entry|exit), Function, CompleteName, TableIndex.
     % Time is seconds since the first event. Requires the profile to have run
     % with -timestamp (the default since R2015b); otherwise Time is NaN.
+    %
+    % Called without an output, it prints a count of entries per function and
+    % returns nothing.
+
+    arguments
+        profileMatPath {mustBeTextScalar}
+        fnNames {mustBeText} = string.empty
+    end
 
     loaded = load(profileMatPath);
     info = loaded.info;
@@ -40,12 +48,8 @@ function events = history_query(profileMatPath, fnNames)
 
     ft = info.FunctionTable;
     nFuncs = numel(ft);
-    fnStr = strings(nFuncs, 1);
-    cnStr = strings(nFuncs, 1);
-    for i = 1:nFuncs
-        fnStr(i) = string(ft(i).FunctionName);
-        cnStr(i) = string(ft(i).CompleteName);
-    end
+    fnStr = string({ft.FunctionName})';
+    cnStr = string({ft.CompleteName})';
     validIdx = tableIndex >= 1 & tableIndex <= nFuncs;
     fnPerEvent = strings(nEvents, 1);
     cnPerEvent = strings(nEvents, 1);
@@ -55,7 +59,7 @@ function events = history_query(profileMatPath, fnNames)
     events = table(tsec, eventType, fnPerEvent, cnPerEvent, tableIndex, ...
         'VariableNames', {'Time', 'EventType', 'Function', 'CompleteName', 'TableIndex'});
 
-    if nargin >= 2 && ~isempty(fnNames)
+    if ~isempty(fnNames)
         targets = string(fnNames);
         mask = ismember(events.Function, targets) | ismember(events.CompleteName, targets);
         events = events(mask, :);
@@ -69,5 +73,8 @@ function events = history_query(profileMatPath, fnNames)
         else
             fprintf('No entry events matched.\n');
         end
+        % Return nothing, so a call without a trailing semicolon does not also
+        % display the whole events table as ans.
+        clear events
     end
 end
