@@ -138,10 +138,10 @@ as one from a long-running subagent, is refused as stale.
 ## Other recorders
 
 The server reads the files defined by the JSON Schemas in `schemas/`, from the directory named by
-`CLAUDE_QUOTA_STATE`, or `~/.local/state/claude-quota` by default. Any tool that writes them can
-stand in for `statusline.py`. The server validates what it reads, and when a file does not match,
-returns an error naming the schema. `uv run --script server.py --write-schemas` regenerates the
-schemas from the models in `server.py`.
+`CLAUDE_QUOTA_STATE`, or `~/.local/state/claude-statusline-quota` by default. Any tool that writes
+them can stand in for `statusline.py`. The server validates what it reads, and when a file does not
+match, returns an error naming the schema. `uv run --script server.py --write-schemas` regenerates
+the schemas from the models in `server.py`.
 
 ## Tests
 

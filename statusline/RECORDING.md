@@ -7,8 +7,8 @@ existing reader bumps `schema` in the session file.
 
 ## Location
 
-The state directory is `$CLAUDE_QUOTA_STATE`, else `$XDG_STATE_HOME/claude-quota`, else
-`~/.local/state/claude-quota`.
+The state directory is `$CLAUDE_QUOTA_STATE`, else `$XDG_STATE_HOME/claude-statusline-quota`,
+else `~/.local/state/claude-statusline-quota`.
 
 ```
 sessions/<session_id>.json                         one session's latest reading

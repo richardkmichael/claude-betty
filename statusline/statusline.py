@@ -38,8 +38,8 @@ Environment:
                               you measure the value above.
     CLAUDE_CONFIG_DIR         honoured when locating .claude.json for the account label, and the
                               credentials the usage endpoint is read with.
-    CLAUDE_QUOTA_STATE        where quota data is recorded. Defaults to claude-quota under
-                              $XDG_STATE_HOME, or ~/.local/state/claude-quota.
+    CLAUDE_QUOTA_STATE        where quota data is recorded. Defaults to claude-statusline-quota
+                              under $XDG_STATE_HOME, or ~/.local/state/claude-statusline-quota.
     COLUMNS                   overrides terminal width detection.
 
 Reads the payload on stdin and .claude.json. That file supplies the account label, which the
@@ -225,7 +225,7 @@ def state_dir(*parts):
     """
     root = os.environ.get("CLAUDE_QUOTA_STATE") or os.path.join(
         os.environ.get("XDG_STATE_HOME") or os.path.join(HOME, ".local", "state"),
-        "claude-quota",
+        "claude-statusline-quota",
     )
     return os.path.join(root, *parts)
 

@@ -163,9 +163,9 @@ renewing it. The request costs no tokens, the fetch is detached so no render eve
 lock file keeps concurrent sessions to one fetch a minute between them. When the endpoint
 rate-limits a fetch, which it does without saying how long to wait, the next attempt waits at least
 five minutes, and every attempt is logged so the undocumented limit can be read off. The answers are
-kept under `~/.local/state/claude-quota/`, one directory per account. A value too old to trust
-reads `STL` in place of the percentage rather than quietly showing a stale number. This is the only
-part of the script that reaches beyond reading a file.
+kept under `~/.local/state/claude-statusline-quota/`, one directory per account. A value too old to
+trust reads `STL` in place of the percentage rather than quietly showing a stale number. This is the
+only part of the script that reaches beyond reading a file.
 
 Status line rendering also records quota data under the same directory, which the `quota` MCP
 server reads. `mcp/quota/schemas/` defines the files, and `statusline/RECORDING.md` describes how

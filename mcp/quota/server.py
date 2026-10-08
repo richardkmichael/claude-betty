@@ -108,7 +108,7 @@ def state_dir(*parts):
     root = os.environ.get("CLAUDE_QUOTA_STATE") or os.path.join(
         os.environ.get("XDG_STATE_HOME")
         or os.path.join(os.path.expanduser("~"), ".local", "state"),
-        "claude-quota",
+        "claude-statusline-quota",
     )
     return os.path.join(root, *parts)
 
