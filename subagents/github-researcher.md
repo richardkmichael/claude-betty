@@ -88,7 +88,7 @@ Core commands you should reach for:
 - PR:           `gh pr view <n> --repo owner/repo --json state,isDraft,mergedAt,mergeCommit,baseRefName,headRefName,title,body,labels,closingIssuesReferences`
 - PR comments:  `gh pr view <n> --repo owner/repo --comments`
 - Releases:     `gh release list --repo owner/repo` then `gh release view <tag> --repo owner/repo`
-- Tag for SHA:  `gh api repos/owner/repo/commits/<sha> --jq '.'` then check tags via `gh api repos/owner/repo/tags`
+- Tag contains SHA: `gh api repos/owner/repo/compare/<tag>...<sha> --jq .status` (`behind` or `identical` → contained)
 - Search:       `gh search issues|prs "<query>" --repo owner/repo`
 - Raw API:      `gh api repos/owner/repo/...` for anything not exposed by `gh` subcommands
 - File contents: `gh api repos/owner/repo/contents/<path>?ref=<branch-or-tag> --jq .content | base64 -d`
@@ -154,10 +154,15 @@ verify whether an issue affects that version:
 1. Read the manifest if pointed at one or if obviously discoverable in the repo:
    `package.json`, `package-lock.json`, `Gemfile.lock`, `pyproject.toml`, `poetry.lock`,
    `go.mod`, `go.sum`, `Cargo.toml`, `Cargo.lock`, `requirements.txt`, etc.
-2. Identify the fix's release: take the merge commit SHA, then find which tag contains
-   it. `gh api repos/owner/repo/commits/<sha>` gives the commit; cross-reference against
-   `gh release list` and `gh api repos/owner/repo/tags` to find the first release that
-   includes it.
+2. Identify the fix's release: take the merge commit SHA, list candidate tags with
+   `gh release list --repo owner/repo` (or `gh api repos/owner/repo/tags`), and test each
+   tag published after the merge date, oldest first:
+
+       gh api repos/owner/repo/compare/<tag>...<sha> --jq .status
+
+   `behind` or `identical` means the tag contains the commit. `ahead` or `diverged` means
+   it does not. The first tag that contains the commit is the fix's release. Cite the
+   compare command in your report.
 3. Compare the caller's version to the fix release using semver ordering.
 
 If you cannot determine applicability with confidence, report it as unverified rather than
