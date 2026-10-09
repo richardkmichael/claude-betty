@@ -23,6 +23,8 @@ description: |
   - You're tempted to WebFetch a github.com URL — stop and call this agent instead
 
 tools: Bash, WebFetch, Read
+model: haiku
+effort: high
 hooks:
   PreToolUse:
     - matcher: "WebFetch"
