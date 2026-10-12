@@ -75,7 +75,8 @@ def show_function(fn: FunctionRow, label: str, max_lines: int, sort_by: str) -> 
         for row in lines[:max_lines]:
             us_per_hit = 1e6 * row["time"] / row["hits"] if row["hits"] else 0
             print(
-                f"  {row['line']:>6}  {int(row['hits']):>9}  {row['time']:>10.3f}  {us_per_hit:>10.2f}"
+                f"  {row['line']:>6}  {int(row['hits']):>9}  {row['time']:>10.3f}  "
+                f"{us_per_hit:>10.2f}"
             )
     return True
 
@@ -94,7 +95,8 @@ def function_extent(source: list[str], first_executed: int) -> tuple[int, int]:
 
 def show_all_lines(fn: FunctionRow, label: str) -> bool:
     """Print every line of the function's extent in line order, with hits, time and source;
-    False when it has no line-level data. Errors when its file is missing or has changed."""
+    False when it has no line-level data. Errors when its file is missing or has changed.
+    """
     executed = {int(row["line"]): row for row in fn.get("ExecutedLines") or []}
     if not executed:
         return False
@@ -211,7 +213,7 @@ def main() -> None:
     if args.all_lines and not args.function:
         parser.error("--all-lines needs a function name")
 
-    with open(args.profile_json) as f:
+    with Path(args.profile_json).open() as f:
         data = json.load(f)
     fns = data["Functions"]
     try:

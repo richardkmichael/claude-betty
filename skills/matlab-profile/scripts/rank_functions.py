@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import pathlib
 import sys
 
 from function_labels import FunctionRow, LabelledFunction, labelled_functions
@@ -94,7 +95,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    with open(args.profile_json) as f:
+    with pathlib.Path(args.profile_json).open() as f:
         data = json.load(f)
     try:
         rows = select_functions(data["Functions"], args.filter)

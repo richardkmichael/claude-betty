@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import pathlib
 import sys
 from typing import Any
 
@@ -48,7 +49,7 @@ def pct(delta: float, base: float) -> float:
 def load_profile(path: str) -> Profile:
     # Return the whole profile dict so callers can read top-level fields
     # (WallTime) as well as the per-function table.
-    with open(path) as f:
+    with pathlib.Path(path).open() as f:
         return json.load(f)
 
 
@@ -73,7 +74,8 @@ def value(fns: Functions, name: str, field: str) -> float:
 def ranked_names(prev_fns: Functions, curr_fns: Functions, field: str) -> list[str]:
     """Functions of either run, largest first by the larger of their two figures, so a
     function that disappeared stays as visible as one that appeared. Ties go by name, so
-    the table is the same on every run."""
+    the table is the same on every run.
+    """
     names = set(prev_fns) | set(curr_fns)
     return sorted(
         names, key=lambda n: (-max(value(prev_fns, n, field), value(curr_fns, n, field)), n)
@@ -93,7 +95,8 @@ def change_label(before: float, after: float) -> str:
 def comparable_settings(profile: Profile) -> dict[str, Any]:
     """The settings that matter for comparison. Exports made before Settings recorded
     Memory lack it, so derive it from the rows for those. Threads (the session's
-    maxNumCompThreads) leaves no trace in the rows, so an export without it stays unknown."""
+    maxNumCompThreads) leaves no trace in the rows, so an export without it stays unknown.
+    """
     settings = dict(profile.get("Settings") or {})
     settings.setdefault("Memory", "on" if has_memory(profile) else "off")
     return settings
@@ -101,7 +104,8 @@ def comparable_settings(profile: Profile) -> dict[str, Any]:
 
 def warn_on_settings_mismatch(prev: Profile, curr: Profile) -> None:
     """Warn when the runs are known to differ in a compared setting. A setting one run did
-    not record is unknown, not different: say so without claiming a mismatch."""
+    not record is unknown, not different: say so without claiming a mismatch.
+    """
     prev_settings = comparable_settings(prev)
     curr_settings = comparable_settings(curr)
     for name in COMPARED_SETTINGS:
@@ -181,7 +185,9 @@ def total_change(
 def compare_memory(prev: Profile, curr: Profile, top: int, paths: tuple[str, str]) -> None:
     # Both runs need memory data: against a time-only run every function would read as
     # freed to zero.
-    missing = [path for path, profile in zip(paths, (prev, curr)) if not has_memory(profile)]
+    missing = [
+        path for path, profile in zip(paths, (prev, curr), strict=True) if not has_memory(profile)
+    ]
     if missing:
         raise ProfileError(
             f"No memory data in {' and '.join(missing)} (profile both runs with -memory on)"

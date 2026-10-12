@@ -73,7 +73,9 @@ def _release_key(path: Path) -> tuple[int, str]:
 def _installed_paths(patterns: list[str]) -> list[Path]:
     """Existing paths matching any pattern, de-duplicated, newest release first."""
     matches = {
-        Path(match) for pattern in patterns for match in glob.glob(str(Path(pattern).expanduser()))
+        Path(match)
+        for pattern in patterns
+        for match in glob.glob(str(Path(pattern).expanduser()))  # noqa: PTH207 - Path.glob rejects absolute patterns
     }
     return sorted(matches, key=lambda path: (_release_key(path), str(path)), reverse=True)
 
@@ -254,7 +256,8 @@ class _Lines:
 
 class _Enclosure:
     """Whether the parser is inside one element: open from its start tag until the end tag
-    that closes it, counting nested elements of the same tag."""
+    that closes it, counting nested elements of the same tag.
+    """
 
     def __init__(self) -> None:
         self._tag: str | None = None
@@ -313,24 +316,26 @@ _COMPOUND = "compound"  # a fraction or a matrix: set apart from what it multipl
 _SCRIPTED = "scripted"  # the right edge of a scripted base: a following operand is set apart
 _SPACE = "space"  # an explicit space in the markup, absorbed into the gap it sits in
 
-_SIGNS = frozenset("+-−±∓–~")  # unary after an operator or a fence, binary after an operand
-_BARS = frozenset("|‖∣∥")  # opening after an operator or a fence, closing after an operand
+# Unary after an operator or a fence, binary after an operand.
+_SIGNS = frozenset("+-−±∓–~")  # noqa: RUF001 - math signs, not typos
+# Opening after an operator or a fence, closing after an operand.
+_BARS = frozenset("|‖∣∥")  # noqa: RUF001 - math bars, not typos
 _OPERATOR_KINDS = {
     **dict.fromkeys("([{⟨〈⌊⌈⟦", _OPEN),
     **dict.fromkeys(")]}⟩〉⌋⌉⟧", _CLOSE),
     **dict.fromkeys("∇∂¬√∀∃△▵▽#", _PREFIX),
-    **dict.fromkeys("∑∏∐∫∬∭∮∯∰⋃⋂⋁⋀⨁⨂⨀⨄", _LARGE),
-    **dict.fromkeys("!′″‴'\"%°", _POSTFIX),
+    **dict.fromkeys("∑∏∐∫∬∭∮∯∰⋃⋂⋁⋀⨁⨂⨀⨄", _LARGE),  # noqa: RUF001 - math operators, not typos
+    **dict.fromkeys("!′″‴'\"%°", _POSTFIX),  # noqa: RUF001 - math operators, not typos
     **dict.fromkeys(",;", _PUNCT),
     **dict.fromkeys("/.^_", _TIGHT),
-    **dict.fromkeys("…⋯⋮⋱⋰∞ℓ", _ATOM),
+    **dict.fromkeys("…⋯⋮⋱⋰∞ℓ", _ATOM),  # noqa: RUF001 - math operators, not typos
 }  # every other operator is binary or a relation
 # The kinds after which a sign is unary and a bar opens; None is the start of a group.
 _OPERATOR_SIDE = frozenset({None, _OPEN, _INFIX, _PREFIX, _LARGE, _PUNCT, _SPACE})
 
 # Operators that mark an accent when set over or under a base, by the LaTeX macro's name.
 _ACCENTS = {
-    "^": "hat", "ˆ": "hat", "¯": "bar", "‾": "bar", "˜": "tilde", "~": "tilde", "˙": "dot",
+    "^": "hat", "ˆ": "hat", "¯": "bar", "‾": "bar", "˜": "tilde", "~": "tilde", "˙": "dot",  # noqa: RUF001 - accent characters, not typos
     "¨": "ddot", "⃛": "dddot", "→": "vec", "⇀": "vec", "︷": "overbrace", "︸": "underbrace",
 }  # fmt: skip
 _SCRIPT_MARKS = {
@@ -339,12 +344,13 @@ _SCRIPT_MARKS = {
 # MathWorks's <mfenced> names two of its delimiters instead of giving the characters.
 _FENCE_NAMES = {"anglebracketleft": "⟨", "anglebracketright": "⟩"}
 # Zero-width spaces and the invisible operators (function application, times, separator).
-_INVISIBLE = re.compile("[\u200b\u2060-\u2064\ufeff]")
+_INVISIBLE = re.compile(r"[\u200b\u2060-\u2064\ufeff]")
 
 
 class _Piece(NamedTuple):
     """A rendered run of a formula with the kind of each of its edges. `token` marks the run
-    of a single token of the markup, which a script leaves unbraced (`x_i`, not `x_{i}`)."""
+    of a single token of the markup, which a script leaves unbraced (`x_i`, not `x_{i}`).
+    """
 
     text: str
     left: str
@@ -377,7 +383,8 @@ class _Formula:
 
     def end(self, tag: str) -> bool:
         """Close the innermost open element of this tag, and whatever is still open inside
-        it; True once the <math> itself is closed. An end tag with no open element is noise."""
+        it; True once the <math> itself is closed. An end tag with no open element is noise.
+        """
         if any(node.tag == tag for node in self._open):
             while self._open.pop().tag != tag:
                 pass
@@ -433,7 +440,8 @@ def _join(pieces: list[_Piece], tight: bool = False) -> str:
 
 def _operator_kind(text: str, previous: str | None, form: str | None) -> str:
     """An <mo>'s kind: from the character, a sign or a bar being read from its form attribute
-    when it has one and otherwise from its position."""
+    when it has one and otherwise from its position.
+    """
     if text in _SIGNS:
         form = form or ("prefix" if previous in _OPERATOR_SIDE else "infix")
         return {"prefix": _PREFIX, "postfix": _POSTFIX}.get(form, _INFIX)
@@ -445,7 +453,8 @@ def _operator_kind(text: str, previous: str | None, form: str | None) -> str:
 
 def _token(node: _MathNode, previous: str | None) -> list[_Piece]:
     """A token's run, with a spacer for whitespace at either end (an <mtext> can read
-    ` such that `); a blank token is a spacer alone."""
+    ` such that `); a blank token is a spacer alone.
+    """
     text = _INVISIBLE.sub("", node.text.replace("\xa0", " "))
     core = " ".join(text.split())
     if not core:
@@ -473,7 +482,8 @@ def _parts(node: _MathNode, count: int) -> list[_MathNode]:
 
 def _braced(pieces: list[_Piece]) -> str:
     """A script's text, set tight: bare when it is one token (`x_i`, `∇^2`), braced
-    otherwise (`x_{i+1}`, `e^{1/n}`), and empty when the script is."""
+    otherwise (`x_{i+1}`, `e^{1/n}`), and empty when the script is.
+    """
     text = _join(pieces, tight=True)
     if len(pieces) == 1 and pieces[0].token and " " not in text:
         return text
@@ -482,7 +492,8 @@ def _braced(pieces: list[_Piece]) -> str:
 
 def _scripted(node: _MathNode) -> _Piece:
     """A base with its scripts, `x_i`, `∇_{xx}^2`, `∑_{i=1}^n`, `f′`; an accent set over or
-    under the base names it instead, `hat(x)`, `vec(v)`, `underbrace(Xβ)_{fixed}`."""
+    under the base names it instead, `hat(x)`, `vec(v)`, `underbrace(Xβ)_{fixed}`.
+    """
     marks = _SCRIPT_MARKS[node.tag]
     children = _parts(node, 1 + len(marks))
     # The scripts are the last children and the base is the rest: one element, or the
@@ -494,7 +505,7 @@ def _scripted(node: _MathNode) -> _Piece:
     # A scripted operator, ∑ or min, takes what follows as its operand; a scripted name
     # (`x_i y`, `hat(d)_k(p)`) does not.
     operator = left == _LARGE or (left == _WORD and pieces[0].token)
-    for script, mark in zip(scripts, marks):
+    for script, mark in zip(scripts, marks, strict=True):
         parts = _group([script], None)
         token = parts[0] if len(parts) == 1 and parts[0].token else None
         if token and token.text in _ACCENTS:
@@ -517,7 +528,8 @@ def _attach(text: str, scripts: list[_MathNode]) -> str:
 
 def _multiscripts(node: _MathNode) -> _Piece:
     """<mmultiscripts>: a base followed by pairs of sub- and superscripts, those after an
-    <mprescripts/> set before it and hugging what precedes (`σ^2 I` when `σ` precedes)."""
+    <mprescripts/> set before it and hugging what precedes (`σ^2 I` when `σ` precedes).
+    """
     base, *scripts = _parts(node, 1)
     tags = [script.tag for script in scripts]
     split = tags.index("mprescripts") if "mprescripts" in tags else len(scripts)
@@ -530,7 +542,8 @@ def _multiscripts(node: _MathNode) -> _Piece:
 
 def _enclosed(text: str) -> bool:
     """Whether one pair of parentheses spans the text, a bare name applied to it aside:
-    `(a + b)`, `sin(x + y)`."""
+    `(a + b)`, `sin(x + y)`.
+    """
     head, paren, body = text.partition("(")
     if not paren or not (head == "" or head.isalnum()):
         return False
@@ -544,7 +557,8 @@ def _enclosed(text: str) -> bool:
 
 def _bound(node: _MathNode) -> str:
     """A fraction's part, parenthesised when the slash would otherwise bind inside it:
-    `1/n`, `∂F/∂x`, `(a + b)/(2c)`, `(x_i − x_j)^2/n`, `1/(a/b)`."""
+    `1/n`, `∂F/∂x`, `(a + b)/(2c)`, `(x_i − x_j)^2/n`, `1/(a/b)`.
+    """
     pieces = _group([node], None)
     text = _join(pieces)
     if len(pieces) == 1:
@@ -580,7 +594,8 @@ def _table(node: _MathNode, previous: str | None) -> _Piece:
     """Rows of cells. First in its context the table lays out the lines of an equation, one
     row each, which the page writes as separate lines; after an opening fence it is the
     body of a matrix, `[a, b; c, d]`, the fence being there already; elsewhere it brackets
-    itself."""
+    itself.
+    """
     rows = [[_string(cell.children) for cell in row.children] for row in node.children]
     if previous is None:
         text = "\n".join(" ".join(filter(None, cells)) for cells in rows)
@@ -773,7 +788,8 @@ class _MarkdownPage(HTMLParser):
 
     def _write_formula(self, text: str) -> None:
         """A formula's lines (the rows of an equation layout) each go on a line of their own,
-        except in a table cell, whose row holds the whole formula."""
+        except in a table cell, whose row holds the whole formula.
+        """
         if self._cells:
             self._out.write(text.replace("\n", " "))
             return
@@ -881,7 +897,8 @@ _NOT_FOUND_SENTINEL = "The page you were looking for does not exist"
 
 def _fetch(url: str) -> str | None:
     """The body of a URL that answers 200, decoded as UTF-8, or None on any other
-    status, a transport error or a timeout."""
+    status, a transport error or a timeout.
+    """
     request = urllib.request.Request(url, headers=_REQUEST_HEADERS)
     try:
         with urllib.request.urlopen(request, timeout=_TIMEOUT_SECONDS) as response:
@@ -895,7 +912,8 @@ def _fetch(url: str) -> str | None:
 def _fetch_page(url: str) -> str | None:
     """Fetch a documentation page. Returns the HTML on a 200, or None on a failed
     fetch or a body that is not a page: too short to be one, or MathWorks's
-    styled not-found body served with a 200."""
+    styled not-found body served with a 200.
+    """
     body = _fetch(url)
     if body is None or len(body) <= 1000 or _NOT_FOUND_SENTINEL in body:
         return None
@@ -985,7 +1003,8 @@ def _remote_url_candidates(fn_name: str) -> list[str]:
 def _fetch_remote(fn_name: str) -> tuple[str, str] | None:
     """Fetch documentation from mathworks.com, trying the release-pinned URL
     first and the unversioned (latest) URL if that page is missing. Returns
-    (html, url fetched), or None."""
+    (html, url fetched), or None.
+    """
     for url in _remote_url_candidates(fn_name):
         raw = _fetch_page(url)
         if raw:
@@ -1016,7 +1035,8 @@ def _function_name_from_help_url(url: str) -> str | None:
 
 def _note_if_not_documentation(page: _MarkdownPage, source: str) -> None:
     """Say on stderr when a page has no documentation content, so the converted text
-    of some other page (a product or search page) is not taken for a reference page."""
+    of some other page (a product or search page) is not taken for a reference page.
+    """
     if not page.is_documentation:
         print(
             f"note: {source} is not a documentation page; showing its main text",

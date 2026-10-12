@@ -69,11 +69,11 @@ def labelled_functions(
     fns: list[FunctionRow], reference: Iterable[FunctionRow] = ()
 ) -> list[LabelledFunction]:
     """Pair each row of fns with its label, in order; see function_labels for reference."""
-    return [LabelledFunction(fn, label) for fn, label in zip(fns, function_labels(fns, reference))]
+    return list(map(LabelledFunction, fns, function_labels(fns, reference)))
 
 
 def labelled(
     fns: list[FunctionRow], reference: Iterable[FunctionRow] = ()
 ) -> dict[str, FunctionRow]:
     """Map each row's label to the row; see function_labels for reference."""
-    return dict(zip(function_labels(fns, reference), fns))
+    return dict(zip(function_labels(fns, reference), fns, strict=True))
