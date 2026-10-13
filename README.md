@@ -39,6 +39,9 @@ Claude Code. Each component is self-contained and installed independently.
 - `github-researcher` — denies `github.com` and `githubusercontent.com` WebFetch calls in the main
   agent, allowed inside the agent, and logged either way. Pairs with the `github-researcher`
   subagent.
+- `markdown-format` — formats each Markdown file Claude edits: wraps at 100 columns, aligns tables,
+  removes bold, and formats and lints Claude Code frontmatter. See
+  `hooks/markdown-format/README.md` for setup.
 
 ## Output styles
 
