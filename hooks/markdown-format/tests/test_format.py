@@ -112,9 +112,16 @@ def test_hook_ignores_missing_file(tmp_path: Path, monkeypatch, capsys) -> None:
     assert run_hook(monkeypatch, capsys, edit_event(tmp_path / "gone.md")) is None
 
 
-def test_hook_silent_when_clean(tmp_path: Path, monkeypatch, capsys) -> None:
-    path = write(tmp_path / "doc.md", "Some **bold**.\n")
+def test_hook_silent_when_unchanged(tmp_path: Path, monkeypatch, capsys) -> None:
+    path = write(tmp_path / "doc.md", "Already tidy.\n")
     assert run_hook(monkeypatch, capsys, edit_event(path)) is None
+
+
+def test_hook_notes_formatting(tmp_path: Path, monkeypatch, capsys) -> None:
+    path = write(tmp_path / "doc.md", "Some **bold**.\n")
+    output = run_hook(monkeypatch, capsys, edit_event(path))
+    context = output["hookSpecificOutput"]["additionalContext"]
+    assert context == "markdown-format: wrapped at 100 columns, tables aligned, bold removed."
     assert path.read_text() == "Some bold.\n"
 
 
@@ -124,6 +131,7 @@ def test_hook_reports_lint(tmp_path: Path, monkeypatch, capsys) -> None:
     context = output["hookSpecificOutput"]["additionalContext"]
     assert output["hookSpecificOutput"]["hookEventName"] == "PostToolUse"
     assert "(Skill)" in context and "unknown key 'turbo'" in context
+    assert "wrapped at" not in context  # nothing to reformat here
 
 
 def test_hook_failure_does_not_raise(tmp_path: Path, monkeypatch, capsys) -> None:

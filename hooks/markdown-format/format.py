@@ -29,7 +29,16 @@ from claude_yaml import Diagnostic, Document, check_frontmatter
 from markdown_it import MarkdownIt
 
 WRAP_WIDTH = 100
-EXTENSIONS = {"gfm", "no_bold", "sentence_spacing"}
+# Each mdformat plugin enabled, with what it guarantees when the hook reports a formatted file.
+PLUGIN_RULES = {
+    "gfm": "tables aligned",
+    "no_bold": "bold removed",
+    "sentence_spacing": None,  # keeps the author's spacing, so nothing to report
+}
+EXTENSIONS = set(PLUGIN_RULES)
+FORMATTED_NOTE = ", ".join(
+    [f"wrapped at {WRAP_WIDTH} columns", *(rule for rule in PLUGIN_RULES.values() if rule)]
+)
 MARKDOWN_SUFFIXES = {".md", ".markdown"}
 HOOK_NAME = "markdown-format"
 
@@ -114,9 +123,14 @@ def run_hook(event: dict) -> int:
     except Exception as error:  # a formatter failure must never block Claude's edit
         print(f"{HOOK_NAME}: {path}: {type(error).__name__}: {error}", file=sys.stderr)
         return 1
+    # Claude Code already tells the model that a hook changed the file; this line says what the
+    # result guarantees, so the model has no reason to check it again.
+    lines = [f"{HOOK_NAME}: {FORMATTED_NOTE}."] if outcome.changed else []
     report = _report(outcome)
     if report:
-        output = {"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": report}}
+        lines.append(report)
+    if lines:
+        output = {"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": "\n".join(lines)}}
         print(json.dumps(output))
     return 0
 
