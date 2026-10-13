@@ -5,9 +5,9 @@ allowed-tools: "Read(//tmp/claude-edit-*/**), Edit(//tmp/claude-edit-*/**), Bash
 hooks:
   PostToolUse:
     - matcher: "Bash"
-      if: "Bash(*tmux*)"
       hooks:
         - type: command
+          if: "Bash(*tmux*)"
           command: "${HOME}/.claude/skills/tmux/scripts/post-start-session-hook.sh"
 ---
 
