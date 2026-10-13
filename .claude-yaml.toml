@@ -1,0 +1,10 @@
+# Kinds of Claude Code files outside .claude/, for linting their frontmatter with claude-yaml.
+# Skills need no entry: any SKILL.md is recognized.
+
+[[files]]
+glob = "subagents/*.md"
+kind = "Agent"
+
+[[files]]
+glob = "output-styles/*.md"
+kind = "OutputStyle"
