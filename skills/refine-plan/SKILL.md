@@ -1,6 +1,6 @@
 ---
 description: Interview me about the plan
-argument-hint: [plan file]
+argument-hint: "[plan file]"
 model: opus
 ---
 
