@@ -45,6 +45,12 @@ def test_wraps_at_100(tmp_path: Path) -> None:
     assert len(lines) == 2 and all(len(line) <= 100 for line in lines)
 
 
+def test_ordered_lists_numbered(tmp_path: Path) -> None:
+    path = write(tmp_path / "doc.md", "1. foo\n1. bar\n1. baz\n\nThen:\n\n3. a\n5. b\n")
+    markdown_format.format_file(path)
+    assert path.read_text() == "1. foo\n2. bar\n3. baz\n\nThen:\n\n3. a\n4. b\n"
+
+
 def test_unchanged_file_not_written(tmp_path: Path) -> None:
     path = write(tmp_path / "doc.md", "Already tidy.\n")
     before = path.stat().st_mtime_ns
@@ -121,7 +127,7 @@ def test_hook_notes_formatting(tmp_path: Path, monkeypatch, capsys) -> None:
     path = write(tmp_path / "doc.md", "Some **bold**.\n")
     output = run_hook(monkeypatch, capsys, edit_event(path))
     context = output["hookSpecificOutput"]["additionalContext"]
-    assert context == "markdown-format: wrapped at 100 columns, tables aligned, bold removed."
+    assert context == "markdown-format: wrapped at 100 columns, lists numbered, tables aligned, bold removed."
     assert path.read_text() == "Some bold.\n"
 
 

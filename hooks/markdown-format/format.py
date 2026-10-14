@@ -8,8 +8,8 @@
 As a PostToolUse hook on Edit and Write, it reads the hook event from stdin.  Given paths
 instead, it formats those files, e.g. to bring an existing repository into line once.
 
-The body is formatted by mdformat: wrapped at WRAP_WIDTH, tables aligned, bold removed and
-existing double spaces after sentences kept.  The frontmatter is formatted and linted by
+The body is formatted by mdformat: wrapped at WRAP_WIDTH, ordered lists numbered consecutively,
+tables aligned, bold removed and existing double spaces after sentences kept.  The frontmatter is formatted and linted by
 claude-yaml.  A file is written only if the result renders the same HTML as before, apart from
 the removed bold.  Lint problems are returned to Claude as additional context.
 
@@ -36,8 +36,14 @@ PLUGIN_RULES = {
     "sentence_spacing": None,  # keeps the author's spacing, so nothing to report
 }
 EXTENSIONS = set(PLUGIN_RULES)
+# "number" writes 1., 2., 3. rather than repeating the first number, renumbering any gaps.
+MDFORMAT_OPTIONS = {"wrap": WRAP_WIDTH, "number": True}
 FORMATTED_NOTE = ", ".join(
-    [f"wrapped at {WRAP_WIDTH} columns", *(rule for rule in PLUGIN_RULES.values() if rule)]
+    [
+        f"wrapped at {WRAP_WIDTH} columns",
+        "lists numbered",
+        *(rule for rule in PLUGIN_RULES.values() if rule),
+    ]
 )
 MARKDOWN_SUFFIXES = {".md", ".markdown"}
 HOOK_NAME = "markdown-format"
@@ -71,7 +77,7 @@ def _rendered_html(text: str, *, drop_bold: bool) -> str:
 
 
 def format_body(body: str) -> str:
-    return mdformat.text(body, extensions=EXTENSIONS, options={"wrap": WRAP_WIDTH})
+    return mdformat.text(body, extensions=EXTENSIONS, options=MDFORMAT_OPTIONS)
 
 
 def format_file(path: Path) -> Outcome:
