@@ -201,6 +201,22 @@ def test_changed_blocks_only(tmp_path: Path) -> None:
     assert all(len(line) <= 100 for line in text.split(LONG_A)[1].splitlines())
 
 
+def test_changed_list_item_only(tmp_path: Path) -> None:
+    before = f"* {LONG_A}* Two\n"
+    path = write(tmp_path / "doc.md", f"* {LONG_A}* Two **now**\n")
+    markdown_format.format_file(path, before)
+    assert path.read_text() == f"* {LONG_A}* Two now\n"
+
+
+def test_list_renumbered_whole(tmp_path: Path) -> None:
+    before = f"1. {LONG_A}2. Two\n"
+    path = write(tmp_path / "doc.md", f"1. {LONG_A}2. Two\n4. Three\n")
+    markdown_format.format_file(path, before)
+    text = path.read_text()
+    assert text.endswith("2. Two\n3. Three\n")
+    assert all(len(line) <= 100 for line in text.splitlines())
+
+
 def test_moved_block_is_not_changed(tmp_path: Path) -> None:
     before = f"{LONG_A}\n{LONG_B}"
     path = write(tmp_path / "doc.md", f"{LONG_B}\n{LONG_A}")

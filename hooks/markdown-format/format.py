@@ -11,8 +11,9 @@ As a hook, it reads the hook event from stdin:
 - PreToolUse on Bash: saves the content of each Markdown file the command names.
 - PostToolUse on Bash: formats each saved file whose content the command changed.
 
-Only the top-level blocks (paragraphs, lists, tables, headings) that changed are formatted, so a
-small edit to an unformatted file does not reformat the whole file.  A new file is formatted whole.
+Only the top-level blocks (paragraphs, tables, headings, and each item of a list) that changed are
+formatted, so a small edit to an unformatted file does not reformat the whole file.  A new file is
+formatted whole.
 Given paths instead of a hook event, it formats those files whole, e.g. to bring an existing
 repository into line once.
 
@@ -117,6 +118,19 @@ mdformat.plugins.PARSER_EXTENSIONS["plain_numbers"] = _PlainNumbers
 
 
 @dataclass
+class _Range:
+    """Lines [start, end) of a top-level block or list item, without trailing blank lines."""
+
+    start: int
+    end: int
+    marker: str = ""  # a list item's marker: "-", "*", "+", or a number with "." or ")"
+    items: list[_Range] = field(default_factory=list)  # a list's items
+
+    def text(self, lines: list[str]) -> str:
+        return "".join(lines[self.start : self.end])
+
+
+@dataclass
 class Outcome:
     path: Path
     changed: bool = False
@@ -146,20 +160,66 @@ def format_body(body: str) -> str:
     return mdformat.text(body, extensions=EXTENSIONS, options=MDFORMAT_OPTIONS)
 
 
-def _block_ranges(lines: list[str]) -> list[tuple[int, int]]:
-    """Line ranges of the top-level blocks, without trailing blank lines."""
-    ranges = []
+def _blocks(lines: list[str]) -> list[_Range]:
+    """The top-level blocks, with the items of each top-level list."""
+
+    def trimmed(token, marker: str = "") -> _Range:
+        start, end = token.map
+        while end > start and not lines[end - 1].strip():
+            end -= 1
+        return _Range(start, end, marker)
+
+    blocks: list[_Range] = []
     for token in _parser().parse("".join(lines)):
         if token.level == 0 and token.map and token.nesting != -1:
-            start, end = token.map
-            while end > start and not lines[end - 1].strip():
-                end -= 1
-            ranges.append((start, end))
-    return ranges
+            blocks.append(trimmed(token))
+        elif token.level == 1 and token.type == "list_item_open":
+            blocks[-1].items.append(trimmed(token, token.info + token.markup))
+    return blocks
+
+
+def _replacement(original: str, formatted: str) -> str:
+    return formatted if original.endswith("\n") else formatted.rstrip("\n")
+
+
+def _merge_items(
+    after: _Range,
+    formatted: _Range,
+    after_lines: list[str],
+    formatted_lines: list[str],
+    unchanged: Counter[str],
+) -> list[str] | None:
+    """The list `after` with only its changed items formatted, or None if they cannot be paired.
+
+    Unchanged items keep their text and markers.  A formatted item keeps its own bullet character,
+    since a different one would start a new list.  When formatting renumbers the list, the whole
+    list is formatted.
+    """
+    if len(after.items) != len(formatted.items):
+        return None
+    out: list[str] = []
+    cursor = after.start
+    for item, f_item in zip(after.items, formatted.items):
+        bullet = item.marker in ("-", "*", "+")
+        if not bullet and item.marker != f_item.marker:
+            return None
+        out.extend(after_lines[cursor : item.start])
+        text = item.text(after_lines)
+        if unchanged[text] > 0:
+            unchanged[text] -= 1
+            out.append(text)
+        else:
+            replacement = f_item.text(formatted_lines)
+            if bullet:
+                replacement = item.marker + replacement[len(f_item.marker) :]
+            out.append(_replacement(text, replacement))
+        cursor = item.end
+    out.extend(after_lines[cursor : after.end])
+    return out
 
 
 def format_changed_blocks(before: str, after: str) -> str:
-    """Format only the blocks of `after` that do not appear unchanged in `before`.
+    """Format only the blocks and list items of `after` that do not appear unchanged in `before`.
 
     Blocks are matched by their exact text, so moving a block does not count as changing it.  If
     formatting changes the number of blocks, the blocks cannot be paired up, and `after` is
@@ -167,26 +227,32 @@ def format_changed_blocks(before: str, after: str) -> str:
     """
     after_lines = after.splitlines(keepends=True)
     formatted_lines = format_body(after).splitlines(keepends=True)
-    after_ranges = _block_ranges(after_lines)
-    formatted_ranges = _block_ranges(formatted_lines)
-    if len(after_ranges) != len(formatted_ranges):
+    after_blocks = _blocks(after_lines)
+    formatted_blocks = _blocks(formatted_lines)
+    if len(after_blocks) != len(formatted_blocks):
         return after
     before_lines = before.splitlines(keepends=True)
-    unchanged = Counter("".join(before_lines[s:e]) for s, e in _block_ranges(before_lines))
+    unchanged: Counter[str] = Counter()
+    for block in _blocks(before_lines):
+        unchanged[block.text(before_lines)] += 1
+        unchanged.update(item.text(before_lines) for item in block.items)
     out: list[str] = []
     cursor = 0
-    for (start, end), (f_start, f_end) in zip(after_ranges, formatted_ranges):
-        out.extend(after_lines[cursor:start])
-        block = "".join(after_lines[start:end])
-        if unchanged[block] > 0:
-            unchanged[block] -= 1
-            out.append(block)
+    for block, f_block in zip(after_blocks, formatted_blocks):
+        out.extend(after_lines[cursor : block.start])
+        text = block.text(after_lines)
+        if unchanged[text] > 0:
+            unchanged[text] -= 1
+            out.append(text)
         else:
-            replacement = "".join(formatted_lines[f_start:f_end])
-            if not block.endswith("\n"):
-                replacement = replacement.rstrip("\n")
-            out.append(replacement)
-        cursor = end
+            merged = block.items and _merge_items(
+                block, f_block, after_lines, formatted_lines, unchanged
+            )
+            if merged:
+                out.extend(merged)
+            else:
+                out.append(_replacement(text, f_block.text(formatted_lines)))
+        cursor = block.end
     out.extend(after_lines[cursor:])
     return "".join(out)
 
