@@ -19,7 +19,9 @@ def write(path: Path, text: str) -> Path:
     return path
 
 
-def run_hook(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], event: dict) -> dict | None:
+def run_hook(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], event: dict
+) -> dict | None:
     monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
     monkeypatch.setattr(sys, "argv", ["format.py"])
     assert markdown_format.main() == 0
@@ -28,7 +30,11 @@ def run_hook(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 
 
 def edit_event(path: Path) -> dict:
-    return {"hook_event_name": "PostToolUse", "tool_name": "Edit", "tool_input": {"file_path": str(path)}}
+    return {
+        "hook_event_name": "PostToolUse",
+        "tool_name": "Edit",
+        "tool_input": {"file_path": str(path)},
+    }
 
 
 def test_formats_body(tmp_path: Path) -> None:
@@ -59,7 +65,9 @@ def test_unchanged_file_not_written(tmp_path: Path) -> None:
 
 
 def test_frontmatter_formatted_and_kept_apart(tmp_path: Path) -> None:
-    path = write(tmp_path / "notes.md", "---\ntitle:   Hello\ntags:\n- a\n---\n# **Title**\n\nBody\n")
+    path = write(
+        tmp_path / "notes.md", "---\ntitle:   Hello\ntags:\n- a\n---\n# **Title**\n\nBody\n"
+    )
     markdown_format.format_file(path)
     assert path.read_text() == "---\ntitle: Hello\ntags:\n  - a\n---\n\n# Title\n\nBody\n"
 
@@ -70,7 +78,10 @@ def test_frontmatter_only(tmp_path: Path) -> None:
 
 
 def test_claude_frontmatter_linted(tmp_path: Path) -> None:
-    path = write(tmp_path / ".claude/agents/a.md", "---\nname: a\ndescription: b\ncolor: chartreuse\n---\n\nBody\n")
+    path = write(
+        tmp_path / ".claude/agents/a.md",
+        "---\nname: a\ndescription: b\ncolor: chartreuse\n---\n\nBody\n",
+    )
     outcome = markdown_format.format_file(path)
     assert outcome.kind == "Agent"
     assert [d.path for d in outcome.diagnostics] == ["/color"]
@@ -127,7 +138,10 @@ def test_hook_notes_formatting(tmp_path: Path, monkeypatch, capsys) -> None:
     path = write(tmp_path / "doc.md", "Some **bold**.\n")
     output = run_hook(monkeypatch, capsys, edit_event(path))
     context = output["hookSpecificOutput"]["additionalContext"]
-    assert context == "markdown-format: wrapped at 100 columns, lists numbered, tables aligned, bold removed."
+    assert (
+        context
+        == "markdown-format: wrapped at 100 columns, lists numbered, tables aligned, bold removed."
+    )
     assert path.read_text() == "Some bold.\n"
 
 
@@ -151,3 +165,57 @@ def test_hook_failure_does_not_raise(tmp_path: Path, monkeypatch, capsys) -> Non
     monkeypatch.setattr(sys, "argv", ["format.py"])
     assert markdown_format.main() == 1
     assert "RuntimeError: boom" in capsys.readouterr().err
+
+
+LONG_A = "Alpha " * 25 + "end.\n"
+LONG_B = "Bravo " * 25 + "end.\n"
+
+
+def test_changed_blocks_only(tmp_path: Path) -> None:
+    before = f"# Doc\n\n{LONG_A}\n{LONG_B}"
+    after = f"# Doc\n\n{LONG_A}\n{LONG_B.replace('end.', 'finish.')}"
+    path = write(tmp_path / "doc.md", after)
+    markdown_format.format_file(path, before)
+    text = path.read_text()
+    assert LONG_A in text  # untouched, still one long line
+    assert LONG_B.replace("end.", "finish.") not in text  # the edited paragraph was wrapped
+    assert all(len(line) <= 100 for line in text.split(LONG_A)[1].splitlines())
+
+
+def test_moved_block_is_not_changed(tmp_path: Path) -> None:
+    before = f"{LONG_A}\n{LONG_B}"
+    path = write(tmp_path / "doc.md", f"{LONG_B}\n{LONG_A}")
+    assert not markdown_format.format_file(path, before).changed
+
+
+def test_reference_definitions_stay_in_place(tmp_path: Path) -> None:
+    before = "[ref]: https://x.test\n\nSee [it][ref].\n"
+    path = write(tmp_path / "doc.md", "[ref]: https://x.test\n\nSee [it][ref] **now**.\n")
+    markdown_format.format_file(path, before)
+    assert path.read_text() == "[ref]: https://x.test\n\nSee [it][ref] now.\n"
+
+
+def test_unchanged_frontmatter_not_relinted(tmp_path: Path) -> None:
+    frontmatter = "---\nname: a\ndescription: b\nturbo: 1\n---\n\n"
+    before = frontmatter + "Body\n"
+    path = write(tmp_path / ".claude/agents/a.md", frontmatter + "Body **more**\n")
+    outcome = markdown_format.format_file(path, before)
+    assert outcome.diagnostics == []
+    assert path.read_text() == frontmatter + "Body more\n"
+
+
+def test_changed_frontmatter_linted(tmp_path: Path) -> None:
+    before = "---\nname: a\ndescription: b\n---\n\nBody\n"
+    path = write(
+        tmp_path / ".claude/agents/a.md", "---\nname: a\ndescription: b\nturbo: 1\n---\n\nBody\n"
+    )
+    assert [d.path for d in markdown_format.format_file(path, before).diagnostics] == ["/turbo"]
+
+
+def test_edit_hook_uses_original_file(tmp_path: Path, monkeypatch, capsys) -> None:
+    before = f"{LONG_A}\nShort.\n"
+    path = write(tmp_path / "doc.md", f"{LONG_A}\nShort **now**.\n")
+    event = edit_event(path) | {"tool_response": {"originalFile": before}}
+    output = run_hook(monkeypatch, capsys, event)
+    assert path.read_text() == f"{LONG_A}\nShort now.\n"
+    assert "wrapped at 100 columns" in output["hookSpecificOutput"]["additionalContext"]

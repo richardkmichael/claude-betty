@@ -5,17 +5,16 @@ does not spend requests checking line lengths and fixing formatting by hand.
 
 For each edited `.md` or `.markdown` file, `format.py`:
 
-1. Formats the body with [mdformat](https://github.com/hukkin/mdformat): wraps prose at 100 columns,
-   numbers ordered lists consecutively, aligns tables, removes bold (`mdformat-no-bold`) and keeps
-   existing two spaces after a sentence (`mdformat-sentence-spacing`).
-2. Formats the YAML frontmatter with `claude-yaml`, keeping comments.  When the file is a Claude
-   Code configuration file (an agent, skill, output style or memory file), `claude-yaml` also lints
-   the frontmatter against the Claude Code schema.
-3. Writes the file only if the formatted body renders the same HTML as before, apart from the
-   removed bold.
-4. Returns any frontmatter problems to Claude as additional context.
-
-Claude Code notices the rewritten file and tells the model, so the next edit does not fail as stale.
+1. Formats the blocks that changed (paragraphs, lists, tables, headings) with
+   [mdformat](https://github.com/hukkin/mdformat): wraps prose at 100 columns, numbers ordered lists
+   consecutively, aligns tables, removes bold (`mdformat-no-bold`) and keeps existing two spaces
+   after a sentence (`mdformat-sentence-spacing`).  Unchanged blocks are left as they are, so a
+   small edit to an unformatted file gives a small diff.  A new file is formatted whole.
+2. Formats the YAML frontmatter with `claude-yaml` when it changed, keeping comments.  When the file
+   is a Claude Code configuration file (an agent, skill, output style or memory file), `claude-yaml`
+   also lints the frontmatter against the Claude Code schema.
+3. Writes the file only if the result renders the same HTML as before, apart from removed bold.
+4. Tells Claude what the formatting guarantees, and returns any frontmatter problems.
 
 ## Requirements
 
@@ -37,7 +36,18 @@ In `settings.json`, replace each `<...>` with the location of that package:
         "hooks": [
           {
             "type": "command",
-            "command": "uv run --script --with <mdformat-no-bold> --with <mdformat-sentence-spacing> --with <claude-yaml> <path>/hooks/markdown-format/format.py"
+            "command": "uv",
+            "args": [
+              "run",
+              "--script",
+              "--with",
+              "<mdformat-no-bold>",
+              "--with",
+              "<mdformat-sentence-spacing>",
+              "--with",
+              "<claude-yaml>",
+              "<path>/hooks/markdown-format/format.py"
+            ]
           }
         ]
       }
@@ -46,10 +56,12 @@ In `settings.json`, replace each `<...>` with the location of that package:
 }
 ```
 
+Exec form expands no `~` or `$HOME`, so the paths must be absolute.
+
 ## Formatting files by hand
 
-Given paths, the script formats those files instead of reading a hook event.  Use this to bring an
-existing repository into line once:
+Given paths, the script formats those files whole instead of reading a hook event.  Use this to
+bring an existing repository into line once, in a commit of its own:
 
 ```
 uv run --script --with ... hooks/markdown-format/format.py docs/*.md
