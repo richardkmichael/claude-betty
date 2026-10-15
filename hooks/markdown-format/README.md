@@ -17,6 +17,10 @@ For each changed `.md` or `.markdown` file, `format.py`:
 3. Writes the file only if the result renders the same HTML as before, apart from removed bold.
 4. Tells Claude what the formatting guarantees, and returns any frontmatter problems.
 
+Claude Code's memory index, `MEMORY.md` in a `memory` directory, is left as it is.  Claude Code
+loads only the first 200 lines of the index, which keeps one entry per line, so wrapping it would
+drop entries.
+
 ## Edits through Bash
 
 Bash commands report no changed files reliably, so the hook watches the files a command names:

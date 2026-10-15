@@ -119,6 +119,15 @@ def test_idempotent(tmp_path: Path) -> None:
     assert path.read_text() == once
 
 
+def test_memory_index_left_alone(tmp_path: Path) -> None:
+    text = "- [A](a.md) — " + "word " * 30 + "\n"
+    index = write(tmp_path / "memory/MEMORY.md", text)
+    entry = write(tmp_path / "memory/a.md", text)
+    assert not markdown_format.format_file(index).changed
+    assert index.read_text() == text
+    assert markdown_format.format_file(entry).changed
+
+
 def test_hook_ignores_other_files(tmp_path: Path, monkeypatch, capsys) -> None:
     path = write(tmp_path / "a.py", "x  =  1\n")
     assert run_hook(monkeypatch, capsys, edit_event(path)) is None
@@ -332,3 +341,11 @@ def test_bash_deleted_file_ignored(tmp_path: Path, snapshots: Path, monkeypatch,
 def test_bash_post_without_snapshot(tmp_path: Path, snapshots: Path, monkeypatch, capsys) -> None:
     _, post = bash_events("echo a.md", tmp_path)
     assert run_hook(monkeypatch, capsys, post) is None
+
+
+def test_bash_memory_index_left_alone(tmp_path: Path, snapshots: Path, monkeypatch, capsys) -> None:
+    path = write(tmp_path / "memory/MEMORY.md", "- [A](a.md)\n")
+    text = "- [A](a.md) — " + "word " * 30 + "\n"
+    command = "python - memory/MEMORY.md <<'EOF'\n...\nEOF"
+    assert run_bash(monkeypatch, capsys, command, tmp_path, lambda: path.write_text(text)) is None
+    assert path.read_text() == text

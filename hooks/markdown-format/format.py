@@ -59,6 +59,9 @@ FORMATTED_NOTE = ", ".join(
     ]
 )
 MARKDOWN_SUFFIXES = {".md", ".markdown"}
+# Claude Code's auto-memory index keeps one entry per line and loads only its first 200 lines, so
+# wrapping it would push entries out of every session's context.
+MEMORY_INDEX = ("memory", "MEMORY.md")
 HOOK_NAME = "markdown-format"
 
 # Bash support: files named in the command are saved here between the PreToolUse and PostToolUse
@@ -152,8 +155,14 @@ def format_changed_blocks(before: str, after: str) -> str:
     return "".join(out)
 
 
+def is_memory_index(path: Path) -> bool:
+    return (path.parent.name, path.name) == MEMORY_INDEX
+
+
 def format_file(path: Path, before: str | None = None, *, whole: bool = False) -> Outcome:
     """Format the file at `path`, given its content before the change (None for a new file)."""
+    if is_memory_index(path):
+        return Outcome(path)
     path = path.resolve()
     outcome = Outcome(path)
     text = path.read_text()
