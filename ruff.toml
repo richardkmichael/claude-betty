@@ -4,3 +4,6 @@ line-length = 100
 # The status line script must never exit non-zero, because Claude Code blanks the status line when
 # it does. It therefore catches everything and draws an error line instead.
 "statusline/statusline.py" = ["BLE001"]
+# The Markdown formatter hook runs after every edit. A formatter failure must not interrupt
+# Claude's work, so the hook catches everything and reports it on stderr.
+"hooks/markdown-format/format.py" = ["BLE001"]
