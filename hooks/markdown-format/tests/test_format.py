@@ -57,6 +57,16 @@ def test_ordered_lists_numbered(tmp_path: Path) -> None:
     assert path.read_text() == "1. foo\n2. bar\n3. baz\n\nThen:\n\n3. a\n4. b\n"
 
 
+def test_ordered_lists_not_zero_padded(tmp_path: Path) -> None:
+    items = [f"{n}. item {n}\n" for n in range(1, 11)]
+    items[8] = "9. item 9 " + "word " * 20 + "\n"
+    path = write(tmp_path / "doc.md", "".join(items))
+    markdown_format.format_file(path)
+    lines = path.read_text().splitlines()
+    assert lines[0] == "1. item 1"
+    assert lines[8:11] == ["9. item 9 " + "word " * 17 + "word", "   word word", "10. item 10"]
+
+
 def test_unchanged_file_not_written(tmp_path: Path) -> None:
     path = write(tmp_path / "doc.md", "Already tidy.\n")
     before = path.stat().st_mtime_ns

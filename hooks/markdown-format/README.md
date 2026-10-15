@@ -8,9 +8,10 @@ For each changed `.md` or `.markdown` file, `format.py`:
 
 1. Formats the blocks that changed (paragraphs, lists, tables, headings) with
    [mdformat](https://github.com/hukkin/mdformat): wraps prose at 100 columns, numbers ordered lists
-   consecutively, aligns tables, removes bold (`mdformat-no-bold`) and keeps existing two spaces
-   after a sentence (`mdformat-sentence-spacing`).  Unchanged blocks are left as they are, so a
-   small edit to an unformatted file gives a small diff.  A new file is formatted whole.
+   1., 2., 3. without zero padding, aligns tables, removes bold (`mdformat-no-bold`) and keeps
+   existing two spaces after a sentence (`mdformat-sentence-spacing`).  Unchanged blocks are left
+   as they are, so a small edit to an unformatted file gives a small diff.  A new file is formatted
+   whole.
 2. Formats the YAML frontmatter with `claude-yaml` when it changed, keeping comments.  When the file
    is a Claude Code configuration file (an agent, skill, output style or memory file), `claude-yaml`
    also lints the frontmatter against the Claude Code schema.

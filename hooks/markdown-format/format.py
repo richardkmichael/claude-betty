@@ -16,7 +16,7 @@ small edit to an unformatted file does not reformat the whole file.  A new file 
 Given paths instead of a hook event, it formats those files whole, e.g. to bring an existing
 repository into line once.
 
-The body is formatted by mdformat: wrapped at WRAP_WIDTH, ordered lists numbered consecutively,
+The body is formatted by mdformat: wrapped at WRAP_WIDTH, ordered lists numbered 1., 2., 3.,
 tables aligned, bold removed and existing double spaces after sentences kept.  Frontmatter that
 changed is formatted and linted by claude-yaml.  A file is written only if the result renders the
 same HTML as before, apart from removed bold.  Lint problems are returned to Claude as additional
@@ -36,27 +36,27 @@ import time
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import ClassVar
 
 import mdformat
+import mdformat.plugins
 from claude_yaml import Diagnostic, Document, check_frontmatter
 from markdown_it import MarkdownIt
+from mdformat.renderer import RenderContext, RenderTreeNode
+from mdformat.renderer._util import get_list_marker_type, is_tight_list
 
 WRAP_WIDTH = 100
 # Each mdformat plugin enabled, with what it guarantees when the hook reports a formatted file.
 PLUGIN_RULES = {
+    "plain_numbers": "lists numbered",
     "gfm": "tables aligned",
     "no_bold": "bold removed",
     "sentence_spacing": None,  # keeps the author's spacing, so nothing to report
 }
 EXTENSIONS = set(PLUGIN_RULES)
-# "number" writes 1., 2., 3. rather than repeating the first number, renumbering any gaps.
-MDFORMAT_OPTIONS = {"wrap": WRAP_WIDTH, "number": True}
+MDFORMAT_OPTIONS = {"wrap": WRAP_WIDTH}
 FORMATTED_NOTE = ", ".join(
-    [
-        f"wrapped at {WRAP_WIDTH} columns",
-        "lists numbered",
-        *(rule for rule in PLUGIN_RULES.values() if rule),
-    ]
+    [f"wrapped at {WRAP_WIDTH} columns", *(rule for rule in PLUGIN_RULES.values() if rule)]
 )
 MARKDOWN_SUFFIXES = {".md", ".markdown"}
 # Claude Code's auto-memory index keeps one entry per line and loads only its first 200 lines, so
@@ -78,6 +78,42 @@ MARKDOWN_PATH = re.compile(
 MARKDOWN_GLOB = re.compile(
     r"(?<![\w./~@+*-])([~\w./@+*-]*\*[~\w./@+*-]*\.(?:md|markdown))(?![\w.-])", re.IGNORECASE
 )
+
+
+def _ordered_list(node: RenderTreeNode, context: RenderContext) -> str:
+    """An ordered list numbered 1., 2., 3., renumbering any gaps.
+
+    mdformat pads the numbers with zeros so that every marker in a list has one width ("01." to
+    "10.").  Here each item is indented to the width of its own marker instead.
+    """
+    marker_type = get_list_marker_type(node)
+    separator = "\n" if is_tight_list(node) else "\n\n"
+    start = node.attrs.get("start")
+    if start is None:
+        start = 1
+    items = []
+    for index, item in enumerate(node.children):
+        marker = f"{start + index}{marker_type}"
+        indent = " " * (len(marker) + 1)
+        with context.indented(len(indent)):
+            first, *rest = item.render(context).split("\n")
+        lines = [f"{marker} {first}" if first else marker]
+        lines.extend(indent + line if line else "" for line in rest)
+        items.append("\n".join(lines))
+    return separator.join(items)
+
+
+class _PlainNumbers:
+    """An mdformat plugin replacing the ordered list renderer, registered as "plain_numbers"."""
+
+    RENDERERS: ClassVar = {"ordered_list": _ordered_list}
+
+    @staticmethod
+    def update_mdit(mdit: MarkdownIt) -> None:
+        pass
+
+
+mdformat.plugins.PARSER_EXTENSIONS["plain_numbers"] = _PlainNumbers
 
 
 @dataclass
