@@ -5,10 +5,15 @@
 # ///
 """Format Markdown files after Claude changes them, and lint Claude Code frontmatter.
 
-As a PostToolUse hook on Edit and Write, it reads the hook event from stdin and formats the edited
-file.  Only the top-level blocks (paragraphs, lists, tables, headings) that changed are formatted,
-so a small edit to an unformatted file does not reformat the whole file.  A new file is formatted
-whole.  Given paths instead of a hook event, it formats those files whole, e.g. to bring an existing
+As a hook, it reads the hook event from stdin:
+
+- PostToolUse on Edit and Write: formats the edited file.
+- PreToolUse on Bash: saves the content of each Markdown file the command names.
+- PostToolUse on Bash: formats each saved file whose content the command changed.
+
+Only the top-level blocks (paragraphs, lists, tables, headings) that changed are formatted, so a
+small edit to an unformatted file does not reformat the whole file.  A new file is formatted whole.
+Given paths instead of a hook event, it formats those files whole, e.g. to bring an existing
 repository into line once.
 
 The body is formatted by mdformat: wrapped at WRAP_WIDTH, ordered lists numbered consecutively,
@@ -24,7 +29,10 @@ claude-yaml packages, passed with `uv run --with`.  See README.md.
 from __future__ import annotations
 
 import json
+import re
 import sys
+import tempfile
+import time
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -52,6 +60,21 @@ FORMATTED_NOTE = ", ".join(
 )
 MARKDOWN_SUFFIXES = {".md", ".markdown"}
 HOOK_NAME = "markdown-format"
+
+# Bash support: files named in the command are saved here between the PreToolUse and PostToolUse
+# events, keyed by tool_use_id.
+SNAPSHOT_DIR = Path(tempfile.gettempdir()) / "claude-markdown-format"
+SNAPSHOT_MAX_AGE_SECONDS = 24 * 60 * 60
+MAX_CANDIDATES = 50
+MAX_FILE_BYTES = 2_000_000
+LEADING_CD = re.compile(r"""\s*cd\s+(?:'([^']*)'|"([^"]*)"|([^\s;&|]+))\s*(?:&&|;|\n)""")
+PATH_CHARS = r"[~\w./@+-]"
+MARKDOWN_PATH = re.compile(
+    rf"(?<!{PATH_CHARS})({PATH_CHARS}*[\w@+-]\.(?:md|markdown))(?![\w.-])", re.IGNORECASE
+)
+MARKDOWN_GLOB = re.compile(
+    r"(?<![\w./~@+*-])([~\w./@+*-]*\*[~\w./@+*-]*\.(?:md|markdown))(?![\w.-])", re.IGNORECASE
+)
 
 
 @dataclass
@@ -203,9 +226,101 @@ def run_edit_hook(event: dict) -> int:
     return 0
 
 
-def run_hook(event: dict) -> int:
-    hook_event = event.get("hook_event_name")
+def markdown_paths(command: str, cwd: Path) -> list[Path]:
+    """The Markdown files a shell command names, resolved against a leading `cd`, if any."""
+    base = cwd
+    match = LEADING_CD.match(command)
+    if match:
+        directory = next(group for group in match.groups() if group is not None)
+        base = cwd / Path(directory).expanduser()
+
+    def resolve(name: str) -> Path:
+        path = Path(name).expanduser()
+        return path if path.is_absolute() else base / path
+
+    found: dict[Path, None] = {}
+    for name in MARKDOWN_PATH.findall(command):
+        found[resolve(name)] = None
+    for pattern in MARKDOWN_GLOB.findall(command):
+        path = resolve(pattern)
+        anchor = Path(path.anchor)
+        for match_path in anchor.glob(str(path.relative_to(anchor))):
+            found[match_path] = None
+    return list(found)[:MAX_CANDIDATES]
+
+
+def _read_small(path: Path) -> str | None:
     try:
+        if path.is_file() and path.stat().st_size <= MAX_FILE_BYTES:
+            return path.read_text()
+    except (OSError, UnicodeDecodeError):
+        pass
+    return None
+
+
+def _snapshot_path(event: dict) -> Path:
+    return SNAPSHOT_DIR / f"{event.get('tool_use_id', 'unknown')}.json"
+
+
+def run_bash_pre(event: dict) -> int:
+    command = (event.get("tool_input") or {}).get("command") or ""
+    paths = markdown_paths(command, Path(event.get("cwd") or "."))
+    if not paths:
+        return 0
+    SNAPSHOT_DIR.mkdir(exist_ok=True)
+    now = time.time()
+    for stale in SNAPSHOT_DIR.glob("*.json"):  # left behind when a command never finished
+        if now - stale.stat().st_mtime > SNAPSHOT_MAX_AGE_SECONDS:
+            stale.unlink(missing_ok=True)
+    snapshot = {str(path): _read_small(path) for path in paths}
+    _snapshot_path(event).write_text(json.dumps(snapshot))
+    return 0
+
+
+def run_bash_post(event: dict) -> int:
+    snapshot_file = _snapshot_path(event)
+    if not snapshot_file.exists():
+        return 0
+    snapshot: dict[str, str | None] = json.loads(snapshot_file.read_text())
+    snapshot_file.unlink(missing_ok=True)
+
+    after = {name: _read_small(Path(name)) for name in snapshot}
+    # A new file holding the earlier content of another named file was moved or copied there.
+    earlier_contents = {before for before in snapshot.values() if before is not None}
+
+    formatted: list[Path] = []
+    lines: list[str] = []
+    for name, before in snapshot.items():
+        current = after[name]
+        if current is None or current == before:
+            continue  # deleted, unreadable, or unchanged (the command only read it)
+        if before is None and current in earlier_contents:
+            continue  # a renamed or copied file, not new writing
+        outcome = format_file(Path(name), before)
+        if outcome.changed:
+            formatted.append(outcome.path)
+        report = _report(outcome)
+        if report:
+            lines.append(report)
+    if formatted:
+        cwd = Path(event.get("cwd") or ".")
+        names = ", ".join(
+            str(p.relative_to(cwd)) if p.is_relative_to(cwd) else str(p) for p in formatted
+        )
+        lines.insert(
+            0, f"{HOOK_NAME}: reformatted {names} ({FORMATTED_NOTE}); re-read before editing again."
+        )
+    _emit(lines)
+    return 0
+
+
+def run_hook(event: dict) -> int:
+    hook_event, tool = event.get("hook_event_name"), event.get("tool_name")
+    try:
+        if tool == "Bash" and hook_event == "PreToolUse":
+            return run_bash_pre(event)
+        if tool == "Bash" and hook_event == "PostToolUse":
+            return run_bash_post(event)
         if hook_event == "PostToolUse":
             return run_edit_hook(event)
     except Exception as error:  # a formatter failure must never block Claude's work

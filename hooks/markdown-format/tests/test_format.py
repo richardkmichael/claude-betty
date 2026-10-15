@@ -219,3 +219,116 @@ def test_edit_hook_uses_original_file(tmp_path: Path, monkeypatch, capsys) -> No
     output = run_hook(monkeypatch, capsys, event)
     assert path.read_text() == f"{LONG_A}\nShort now.\n"
     assert "wrapped at 100 columns" in output["hookSpecificOutput"]["additionalContext"]
+
+
+@pytest.mark.parametrize(
+    ("command", "expected"),
+    [
+        pytest.param("cat docs/A.md", ["base/docs/A.md"], id="relative"),
+        pytest.param("cd /repo && wc -l docs/A.md", ["/repo/docs/A.md"], id="leading-cd"),
+        pytest.param(
+            "cd sub; sed -i '' 's/a/b/' x.markdown", ["base/sub/x.markdown"], id="cd-semicolon"
+        ),
+        pytest.param(
+            "cd /repo && python3 - <<'EOF'\np='docs/OPERATING.md'\nopen(p,'w')\nEOF",
+            ["/repo/docs/OPERATING.md"],
+            id="python-heredoc",
+        ),
+        pytest.param('edits = {"a.md": 1, "/abs/b.md": 2}', ["base/a.md", "/abs/b.md"], id="dict"),
+        pytest.param("mv a.md b.md", ["base/a.md", "base/b.md"], id="rename"),
+        pytest.param("grep -n md file.mdx notes.txt", [], id="not-markdown"),
+    ],
+)
+def test_markdown_paths(command: str, expected: list[str]) -> None:
+    found = markdown_format.markdown_paths(command, Path("base"))
+    assert [str(p) for p in found] == expected
+
+
+def test_markdown_paths_glob(tmp_path: Path) -> None:
+    write(tmp_path / "docs/a.md", "a\n")
+    write(tmp_path / "docs/b.md", "b\n")
+    found = markdown_format.markdown_paths("for f in docs/*.md; do wc -l $f; done", tmp_path)
+    assert sorted(p.name for p in found) == ["a.md", "b.md"]
+
+
+@pytest.fixture
+def snapshots(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    directory = tmp_path / "snapshots"
+    monkeypatch.setattr(markdown_format, "SNAPSHOT_DIR", directory)
+    return directory
+
+
+def bash_events(command: str, cwd: Path, tool_use_id: str = "toolu_1") -> tuple[dict, dict]:
+    common = {
+        "tool_name": "Bash",
+        "tool_input": {"command": command},
+        "cwd": str(cwd),
+        "tool_use_id": tool_use_id,
+    }
+    return common | {"hook_event_name": "PreToolUse"}, common | {"hook_event_name": "PostToolUse"}
+
+
+def run_bash(monkeypatch, capsys, command: str, cwd: Path, action) -> dict | None:
+    pre, post = bash_events(command, cwd)
+    assert run_hook(monkeypatch, capsys, pre) is None
+    action()
+    return run_hook(monkeypatch, capsys, post)
+
+
+def test_bash_read_only_does_nothing(tmp_path: Path, snapshots: Path, monkeypatch, capsys) -> None:
+    path = write(tmp_path / "doc.md", "A **b**\n")
+    assert run_bash(monkeypatch, capsys, "wc -l doc.md", tmp_path, lambda: None) is None
+    assert path.read_text() == "A **b**\n"
+    assert not list(snapshots.glob("*.json"))
+
+
+def test_bash_edit_formats_changed_blocks(
+    tmp_path: Path, snapshots: Path, monkeypatch, capsys
+) -> None:
+    path = write(tmp_path / "docs/OPERATING.md", f"{LONG_A}\nShort.\n")
+    command = "python3 - <<'EOF'\np='docs/OPERATING.md'\nEOF"
+    output = run_bash(
+        monkeypatch,
+        capsys,
+        command,
+        tmp_path,
+        lambda: path.write_text(f"{LONG_A}\nShort **now**.\n"),
+    )
+    assert path.read_text() == f"{LONG_A}\nShort now.\n"
+    context = output["hookSpecificOutput"]["additionalContext"]
+    assert context.startswith(
+        "markdown-format: reformatted docs/OPERATING.md (wrapped at 100 columns"
+    )
+    assert context.endswith("re-read before editing again.")
+
+
+def test_bash_rename_left_alone(tmp_path: Path, snapshots: Path, monkeypatch, capsys) -> None:
+    old = write(tmp_path / "a.md", f"{LONG_A}")
+    new = tmp_path / "b.md"
+    assert run_bash(monkeypatch, capsys, "mv a.md b.md", tmp_path, lambda: old.rename(new)) is None
+    assert new.read_text() == LONG_A
+
+
+def test_bash_new_file_formatted_whole(
+    tmp_path: Path, snapshots: Path, monkeypatch, capsys
+) -> None:
+    path = tmp_path / "new.md"
+    output = run_bash(
+        monkeypatch,
+        capsys,
+        "cat > new.md <<'EOF'\n...\nEOF",
+        tmp_path,
+        lambda: path.write_text(LONG_A),
+    )
+    assert all(len(line) <= 100 for line in path.read_text().splitlines())
+    assert "reformatted new.md" in output["hookSpecificOutput"]["additionalContext"]
+
+
+def test_bash_deleted_file_ignored(tmp_path: Path, snapshots: Path, monkeypatch, capsys) -> None:
+    path = write(tmp_path / "a.md", "A\n")
+    assert run_bash(monkeypatch, capsys, "rm a.md", tmp_path, path.unlink) is None
+
+
+def test_bash_post_without_snapshot(tmp_path: Path, snapshots: Path, monkeypatch, capsys) -> None:
+    _, post = bash_events("echo a.md", tmp_path)
+    assert run_hook(monkeypatch, capsys, post) is None
