@@ -12,6 +12,9 @@ As a hook, it reads the hook event from stdin:
 - PostToolUse on Bash: formats each saved file whose content the command changed, unless the
   command restored it from git, e.g. with `git checkout -- <file>`.
 
+A file is left alone while git has it unmerged, or while its worktree is in the middle of a rebase,
+merge, cherry-pick or revert, since formatting would change what git is merging.
+
 Only the top-level blocks (paragraphs, tables, headings, and each item of a list) that changed are
 formatted, so a small edit to an unformatted file does not reformat the whole file.  Indented code
 blocks stay indented.  A new file is formatted whole, with indented code blocks fenced.
@@ -79,6 +82,14 @@ MAX_CANDIDATES = 50
 MAX_FILE_BYTES = 2_000_000
 GIT_TIMEOUT_SECONDS = 5
 GIT_OBJECT_ID = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
+# Present in a worktree's git directory while a rebase, merge, cherry-pick or revert is underway.
+GIT_OPERATION_STATE = (
+    "rebase-merge",
+    "rebase-apply",
+    "MERGE_HEAD",
+    "CHERRY_PICK_HEAD",
+    "REVERT_HEAD",
+)
 LEADING_CD = re.compile(r"""\s*cd\s+(?:'([^']*)'|"([^"]*)"|([^\s;&|]+))\s*(?:&&|;|\n)""")
 PATH_CHARS = r"[~\w./@+-]"
 MARKDOWN_PATH = re.compile(
@@ -295,12 +306,39 @@ def is_memory_index(path: Path) -> bool:
     return (path.parent.name, path.name) == MEMORY_INDEX
 
 
+def _git(path: Path, *args: str) -> str | None:
+    """The output of a git command run in the directory of `path`, or None if it fails."""
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(path.parent), *args],
+            capture_output=True,
+            text=True,
+            timeout=GIT_TIMEOUT_SECONDS,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return result.stdout if result.returncode == 0 else None
+
+
+def is_being_merged(path: Path) -> bool:
+    """True if git has `path` unmerged, or a rebase, merge, cherry-pick or revert is underway."""
+    git_dir = _git(path, "rev-parse", "--absolute-git-dir")
+    if git_dir is None:
+        return False
+    if any((Path(git_dir.strip()) / name).exists() for name in GIT_OPERATION_STATE):
+        return True
+    return bool(_git(path, "ls-files", "--unmerged", "--", path.name))
+
+
 def format_file(path: Path, before: str | None = None, *, whole: bool = False) -> Outcome:
     """Format the file at `path`, given its content before the change (None for a new file)."""
     if is_memory_index(path):
         return Outcome(path)
     path = path.resolve()
     outcome = Outcome(path)
+    if is_being_merged(path):
+        return outcome
     text = path.read_text()
     document = Document.parse(text)
     previous = None if whole or before is None else Document.parse(before)

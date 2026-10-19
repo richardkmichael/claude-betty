@@ -19,6 +19,9 @@ For each changed `.md` or `.markdown` file, `format.py`:
 3. Writes the file only if the result renders the same HTML as before, apart from removed bold.
 4. Tells Claude what the formatting guarantees, and returns any frontmatter problems.
 
+A file git has unmerged, or one in a worktree in the middle of a rebase, merge, cherry-pick or
+revert, is left as it is, so formatting does not change what git is merging.
+
 Claude Code's memory index, `MEMORY.md` in a `memory` directory, is left as it is.  Claude Code
 loads only the first 200 lines of the index, which keeps one entry per line, so wrapping it would
 drop entries.

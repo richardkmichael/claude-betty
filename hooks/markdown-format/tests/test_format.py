@@ -430,3 +430,39 @@ def test_bash_edit_then_stage_formatted(repo: Path, snapshots: Path, monkeypatch
     output = run_bash(monkeypatch, capsys, "python edit.py && git add doc.md", repo, edit_and_stage)
     assert "reformatted doc.md" in output["hookSpecificOutput"]["additionalContext"]
     assert all(len(line) <= 100 for line in path.read_text().splitlines())
+
+
+@pytest.fixture
+def conflicted(repo: Path) -> Path:
+    git(repo, "checkout", "-q", "-b", "other")
+    write(repo / "doc.md", LONG_A.replace("end.", "other."))
+    git(repo, "commit", "-q", "-am", "other")
+    git(repo, "checkout", "-q", "-")
+    write(repo / "doc.md", LONG_A.replace("end.", "main."))
+    git(repo, "commit", "-q", "-am", "main")
+    result = subprocess.run(
+        ["git", "-C", str(repo), "merge", "-q", "other"], check=False, capture_output=True
+    )
+    assert result.returncode != 0
+    return repo
+
+
+def test_conflicted_file_left_alone(conflicted: Path) -> None:
+    path = conflicted / "doc.md"
+    text = path.read_text()
+    assert "<<<<<<< " in text
+    assert not markdown_format.format_file(path, whole=True).changed
+    assert path.read_text() == text
+
+
+def test_unmerged_file_left_alone_without_merge_state(conflicted: Path) -> None:
+    (conflicted / ".git/MERGE_HEAD").unlink()  # as after a conflicted `git stash pop`
+    path = conflicted / "doc.md"
+    assert not markdown_format.format_file(path, whole=True).changed
+
+
+def test_resolved_file_left_alone_during_merge(conflicted: Path) -> None:
+    path = write(conflicted / "doc.md", LONG_A)
+    git(conflicted, "add", "doc.md")
+    assert not markdown_format.format_file(path, whole=True).changed
+    assert path.read_text() == LONG_A
