@@ -30,6 +30,8 @@ Bash commands report no changed files reliably, so the hook watches the files a 
   resolving relative paths against a leading `cd`.  Shell globs such as `docs/*.md` are expanded.
 - After the command (`PostToolUse`), it formats each saved file whose content changed.  A file the
   command only read is unchanged and left alone, as is a file renamed or copied to a new name.
+- A file the command restored from git, as committed or staged before the command ran (e.g.
+  `git checkout -- <file>`), is left alone, so a restore holds.
 - Claude is told which files were reformatted, and to re-read them before editing again.
 
 A file whose path the command builds at run time is not seen.

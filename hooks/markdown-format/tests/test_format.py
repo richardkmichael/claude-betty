@@ -1,6 +1,7 @@
 import importlib.util
 import io
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -375,3 +376,42 @@ def test_bash_memory_index_left_alone(tmp_path: Path, snapshots: Path, monkeypat
     command = "python - memory/MEMORY.md <<'EOF'\n...\nEOF"
     assert run_bash(monkeypatch, capsys, command, tmp_path, lambda: path.write_text(text)) is None
     assert path.read_text() == text
+
+
+def git(cwd: Path, *args: str) -> None:
+    subprocess.run(["git", "-C", str(cwd), *args], check=True, capture_output=True)
+
+
+@pytest.fixture
+def repo(tmp_path: Path) -> Path:
+    git(tmp_path, "init", "-q")
+    git(tmp_path, "config", "user.email", "test@example.com")
+    git(tmp_path, "config", "user.name", "Test")
+    write(tmp_path / "doc.md", LONG_A)
+    git(tmp_path, "add", "doc.md")
+    git(tmp_path, "commit", "-q", "-m", "doc")
+    return tmp_path
+
+
+def test_bash_git_restore_left_alone(repo: Path, snapshots: Path, monkeypatch, capsys) -> None:
+    path = repo / "doc.md"
+    markdown_format.format_file(path, whole=True)
+    assert path.read_text() != LONG_A
+
+    def restore() -> None:
+        git(repo, "checkout", "--", "doc.md")
+
+    assert run_bash(monkeypatch, capsys, "git checkout -- doc.md", repo, restore) is None
+    assert path.read_text() == LONG_A
+
+
+def test_bash_edit_then_stage_formatted(repo: Path, snapshots: Path, monkeypatch, capsys) -> None:
+    path = repo / "doc.md"
+
+    def edit_and_stage() -> None:
+        path.write_text(LONG_A.replace("end.", "finish."))
+        git(repo, "add", "doc.md")
+
+    output = run_bash(monkeypatch, capsys, "python edit.py && git add doc.md", repo, edit_and_stage)
+    assert "reformatted doc.md" in output["hookSpecificOutput"]["additionalContext"]
+    assert all(len(line) <= 100 for line in path.read_text().splitlines())

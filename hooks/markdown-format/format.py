@@ -9,7 +9,8 @@ As a hook, it reads the hook event from stdin:
 
 - PostToolUse on Edit and Write: formats the edited file.
 - PreToolUse on Bash: saves the content of each Markdown file the command names.
-- PostToolUse on Bash: formats each saved file whose content the command changed.
+- PostToolUse on Bash: formats each saved file whose content the command changed, unless the
+  command restored it from git, e.g. with `git checkout -- <file>`.
 
 Only the top-level blocks (paragraphs, tables, headings, and each item of a list) that changed are
 formatted, so a small edit to an unformatted file does not reformat the whole file.  A new file is
@@ -29,8 +30,10 @@ claude-yaml packages, passed with `uv run --with`.  See README.md.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
+import subprocess
 import sys
 import tempfile
 import time
@@ -71,6 +74,8 @@ SNAPSHOT_DIR = Path(tempfile.gettempdir()) / "claude-markdown-format"
 SNAPSHOT_MAX_AGE_SECONDS = 24 * 60 * 60
 MAX_CANDIDATES = 50
 MAX_FILE_BYTES = 2_000_000
+GIT_TIMEOUT_SECONDS = 5
+GIT_OBJECT_ID = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
 LEADING_CD = re.compile(r"""\s*cd\s+(?:'([^']*)'|"([^"]*)"|([^\s;&|]+))\s*(?:&&|;|\n)""")
 PATH_CHARS = r"[~\w./@+-]"
 MARKDOWN_PATH = re.compile(
@@ -369,6 +374,30 @@ def _read_small(path: Path) -> str | None:
     return None
 
 
+def _git_versions(path: Path) -> list[str]:
+    """The blob ids of `path` at HEAD and in the index, or none outside a git repository."""
+    if not path.parent.is_dir():
+        return []
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(path.parent), "cat-file", "--batch-check=%(objectname)"],
+            input=f"HEAD:./{path.name}\n:./{path.name}\n",
+            capture_output=True,
+            text=True,
+            timeout=GIT_TIMEOUT_SECONDS,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return []
+    return [line for line in result.stdout.splitlines() if GIT_OBJECT_ID.fullmatch(line)]
+
+
+def _blob_id(path: Path) -> str:
+    """The id git gives the content of `path` as a blob, in a SHA-1 repository."""
+    data = path.read_bytes()
+    return hashlib.sha1(b"blob %d\0" % len(data) + data).hexdigest()
+
+
 def _snapshot_path(event: dict) -> Path:
     return SNAPSHOT_DIR / f"{event.get('tool_use_id', 'unknown')}.json"
 
@@ -383,7 +412,9 @@ def run_bash_pre(event: dict) -> int:
     for stale in SNAPSHOT_DIR.glob("*.json"):  # left behind when a command never finished
         if now - stale.stat().st_mtime > SNAPSHOT_MAX_AGE_SECONDS:
             stale.unlink(missing_ok=True)
-    snapshot = {str(path): _read_small(path) for path in paths}
+    snapshot = {
+        str(path): {"content": _read_small(path), "git": _git_versions(path)} for path in paths
+    }
     _snapshot_path(event).write_text(json.dumps(snapshot))
     return 0
 
@@ -392,21 +423,23 @@ def run_bash_post(event: dict) -> int:
     snapshot_file = _snapshot_path(event)
     if not snapshot_file.exists():
         return 0
-    snapshot: dict[str, str | None] = json.loads(snapshot_file.read_text())
+    snapshot: dict[str, dict] = json.loads(snapshot_file.read_text())
     snapshot_file.unlink(missing_ok=True)
 
     after = {name: _read_small(Path(name)) for name in snapshot}
     # A new file holding the earlier content of another named file was moved or copied there.
-    earlier_contents = {before for before in snapshot.values() if before is not None}
+    earlier_contents = {saved["content"] for saved in snapshot.values()} - {None}
 
     formatted: list[Path] = []
     lines: list[str] = []
-    for name, before in snapshot.items():
-        current = after[name]
+    for name, saved in snapshot.items():
+        before, current = saved["content"], after[name]
         if current is None or current == before:
             continue  # deleted, unreadable, or unchanged (the command only read it)
         if before is None and current in earlier_contents:
             continue  # a renamed or copied file, not new writing
+        if _blob_id(Path(name)) in saved["git"]:
+            continue  # restored from git as it was committed or staged, not new writing
         outcome = format_file(Path(name), before)
         if outcome.changed:
             formatted.append(outcome.path)
