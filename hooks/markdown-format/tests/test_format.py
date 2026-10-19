@@ -218,6 +218,21 @@ def test_list_renumbered_whole(tmp_path: Path) -> None:
     assert all(len(line) <= 100 for line in text.splitlines())
 
 
+def test_edited_indented_code_stays_indented(tmp_path: Path) -> None:
+    code = "    a = 1\n\n    b = 2\n"
+    path = write(
+        tmp_path / "doc.md", f"Text.\n\n{code.replace('2', '3')}\n- Item **one**\n\n      c = 4\n"
+    )
+    markdown_format.format_file(path, f"Text.\n\n{code}\n- Item\n\n      c = 4\n")
+    assert path.read_text() == f"Text.\n\n{code.replace('2', '3')}\n- Item one\n\n      c = 4\n"
+
+
+def test_new_file_indented_code_fenced(tmp_path: Path) -> None:
+    path = write(tmp_path / "doc.md", "Text.\n\n    a = 1\n")
+    markdown_format.format_file(path)
+    assert path.read_text() == "Text.\n\n```\na = 1\n```\n"
+
+
 def test_moved_block_is_not_changed(tmp_path: Path) -> None:
     before = f"{LONG_A}\n{LONG_B}"
     path = write(tmp_path / "doc.md", f"{LONG_B}\n{LONG_A}")

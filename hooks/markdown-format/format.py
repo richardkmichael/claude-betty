@@ -13,8 +13,8 @@ As a hook, it reads the hook event from stdin:
   command restored it from git, e.g. with `git checkout -- <file>`.
 
 Only the top-level blocks (paragraphs, tables, headings, and each item of a list) that changed are
-formatted, so a small edit to an unformatted file does not reformat the whole file.  A new file is
-formatted whole.
+formatted, so a small edit to an unformatted file does not reformat the whole file.  Indented code
+blocks stay indented.  A new file is formatted whole, with indented code blocks fenced.
 Given paths instead of a hook event, it formats those files whole, e.g. to bring an existing
 repository into line once.
 
@@ -46,7 +46,7 @@ import mdformat
 import mdformat.plugins
 from claude_yaml import Diagnostic, Document, check_frontmatter
 from markdown_it import MarkdownIt
-from mdformat.renderer import RenderContext, RenderTreeNode
+from mdformat.renderer import DEFAULT_RENDERERS, RenderContext, RenderTreeNode
 from mdformat.renderer._util import get_list_marker_type, is_tight_list
 
 WRAP_WIDTH = 100
@@ -56,9 +56,12 @@ PLUGIN_RULES = {
     "gfm": "tables aligned",
     "no_bold": "bold removed",
     "sentence_spacing": None,  # keeps the author's spacing, so nothing to report
+    "indented_code": None,  # keeps edited code blocks as written, so nothing to report
 }
 EXTENSIONS = set(PLUGIN_RULES)
 MDFORMAT_OPTIONS = {"wrap": WRAP_WIDTH}
+# Read by the "indented_code" plugin: keep indented code blocks indented rather than fencing them.
+KEEP_INDENTED_CODE = "keep_indented_code"
 FORMATTED_NOTE = ", ".join(
     [f"wrapped at {WRAP_WIDTH} columns", *(rule for rule in PLUGIN_RULES.values() if rule)]
 )
@@ -122,6 +125,31 @@ class _PlainNumbers:
 mdformat.plugins.PARSER_EXTENSIONS["plain_numbers"] = _PlainNumbers
 
 
+def _code_block(node: RenderTreeNode, context: RenderContext) -> str:
+    """An indented code block, kept indented when the KEEP_INDENTED_CODE option is set.
+
+    mdformat writes every indented code block as a fenced one.
+    """
+    if not context.options.get("mdformat", {}).get(KEEP_INDENTED_CODE):
+        return DEFAULT_RENDERERS["code_block"](node, context)
+    return "\n".join(
+        "    " + line if line else "" for line in node.content.rstrip("\n").split("\n")
+    )
+
+
+class _IndentedCode:
+    """An mdformat plugin replacing the code block renderer, registered as "indented_code"."""
+
+    RENDERERS: ClassVar = {"code_block": _code_block}
+
+    @staticmethod
+    def update_mdit(mdit: MarkdownIt) -> None:
+        pass
+
+
+mdformat.plugins.PARSER_EXTENSIONS["indented_code"] = _IndentedCode
+
+
 @dataclass
 class _Range:
     """Lines [start, end) of a top-level block or list item, without trailing blank lines."""
@@ -161,8 +189,9 @@ def _rendered_html(text: str) -> str:
     return " ".join(html.split())
 
 
-def format_body(body: str) -> str:
-    return mdformat.text(body, extensions=EXTENSIONS, options=MDFORMAT_OPTIONS)
+def format_body(body: str, *, keep_indented_code: bool = False) -> str:
+    options = MDFORMAT_OPTIONS | {KEEP_INDENTED_CODE: keep_indented_code}
+    return mdformat.text(body, extensions=EXTENSIONS, options=options)
 
 
 def _blocks(lines: list[str]) -> list[_Range]:
@@ -231,7 +260,7 @@ def format_changed_blocks(before: str, after: str) -> str:
     returned unchanged.
     """
     after_lines = after.splitlines(keepends=True)
-    formatted_lines = format_body(after).splitlines(keepends=True)
+    formatted_lines = format_body(after, keep_indented_code=True).splitlines(keepends=True)
     after_blocks = _blocks(after_lines)
     formatted_blocks = _blocks(formatted_lines)
     if len(after_blocks) != len(formatted_blocks):
