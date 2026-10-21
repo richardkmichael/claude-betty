@@ -326,6 +326,38 @@ def run_bash(monkeypatch, capsys, command: str, cwd: Path, action) -> dict | Non
     return run_hook(monkeypatch, capsys, post)
 
 
+@pytest.mark.parametrize(
+    ("command", "can_write"),
+    [
+        ("grep -n 'a > b' docs/x.md 2>/dev/null | head", False),
+        ("awk 'length > 100' a.md && wc -l a.md 2>&1", False),
+        ("FOO=1 rg x a.md; (cd d && cat b.md)", False),
+        ("git -C repo diff -- a.md", False),
+        ("sed -n 1,5p a.md", False),
+        ("cat a.md > b.md", True),
+        ("grep x a.md\nsed -i '' 's/a/b/' a.md", True),
+        ("sed -Ei 's/a/b/' a.md", True),
+        ("git checkout -- a.md", True),
+        ("python - <<'EOF'\nopen('a.md')\nEOF", True),
+        ("grep 'unbalanced a.md", True),
+    ],
+)
+def test_command_can_write(command: str, can_write: bool) -> None:
+    assert markdown_format.command_can_write(command) is can_write
+
+
+def test_bash_read_only_ignores_other_writers(
+    tmp_path: Path, snapshots: Path, monkeypatch, capsys
+) -> None:
+    path = write(tmp_path / "doc.md", "Short.\n")
+
+    def other_process_writes() -> None:
+        path.write_text(LONG_A)
+
+    assert run_bash(monkeypatch, capsys, "grep -n x doc.md", tmp_path, other_process_writes) is None
+    assert path.read_text() == LONG_A
+
+
 def test_bash_read_only_does_nothing(tmp_path: Path, snapshots: Path, monkeypatch, capsys) -> None:
     path = write(tmp_path / "doc.md", "A **b**\n")
     assert run_bash(monkeypatch, capsys, "wc -l doc.md", tmp_path, lambda: None) is None

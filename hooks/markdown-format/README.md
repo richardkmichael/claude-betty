@@ -31,7 +31,10 @@ drop entries.
 Bash commands report no changed files reliably, so the hook watches the files a command names:
 
 - Before the command runs (`PreToolUse`), it saves each Markdown file named in the command text,
-  resolving relative paths against a leading `cd`.  Shell globs such as `docs/*.md` are expanded.
+  resolving relative paths against a leading `cd`.  Shell globs such as `docs/*.md` are expanded. A
+  command made only of read-only programs (`grep`, `cat`, `awk`, `sed` without `-i`, `git diff` and
+  the like) with no output redirection is skipped, so a file another process changes while it runs
+  is left alone.
 - After the command (`PostToolUse`), it formats each saved file whose content changed.  A file the
   command only read is unchanged and left alone, as is a file renamed or copied to a new name.
 - A file the command restored from git, as committed or staged before the command ran (e.g.

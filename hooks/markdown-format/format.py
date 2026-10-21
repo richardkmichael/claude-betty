@@ -8,7 +8,8 @@
 As a hook, it reads the hook event from stdin:
 
 - PostToolUse on Edit and Write: formats the edited file.
-- PreToolUse on Bash: saves the content of each Markdown file the command names.
+- PreToolUse on Bash: saves the content of each Markdown file the command names, unless the
+  command only reads (e.g. `grep`, `cat`, `git diff`).
 - PostToolUse on Bash: formats each saved file whose content the command changed, unless the
   command restored it from git, e.g. with `git checkout -- <file>`.
 
@@ -36,6 +37,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -95,6 +97,29 @@ PATH_CHARS = r"[~\w./@+-]"
 MARKDOWN_PATH = re.compile(
     rf"(?<!{PATH_CHARS})({PATH_CHARS}*[\w@+-]\.(?:md|markdown))(?![\w.-])", re.IGNORECASE
 )
+# Programs that write no files, unless given an output redirection or the flags checked in
+# _segment_can_write.  A command made only of these cannot have changed a file another process
+# changed while it ran.
+READ_ONLY_PROGRAMS = frozenset(
+    {"awk", "cat", "cd", "cmp", "diff", "echo", "egrep", "fgrep", "file", "grep", "head", "less",
+     "ls", "printf", "pwd", "rg", "sed", "stat", "tail", "test", "wc"}
+)  # fmt: skip
+READ_ONLY_GIT_COMMANDS = frozenset(
+    {
+        "blame",
+        "cat-file",
+        "diff",
+        "grep",
+        "log",
+        "ls-files",
+        "ls-tree",
+        "rev-parse",
+        "show",
+        "status",
+    }
+)
+SHELL_SEPARATORS = frozenset({"|", "||", "&&", ";", "&", "\n", "(", ")"})
+OUTPUT_REDIRECTS = frozenset({">", ">>", ">|", "&>", "&>>", ">&"})
 MARKDOWN_GLOB = re.compile(
     r"(?<![\w./~@+*-])([~\w./@+*-]*\*[~\w./@+*-]*\.(?:md|markdown))(?![\w.-])", re.IGNORECASE
 )
@@ -409,6 +434,51 @@ def run_edit_hook(event: dict) -> int:
     return 0
 
 
+def _segment_can_write(words: list[str]) -> bool:
+    """Whether one simple command (no pipes or separators) can write a file."""
+    while words and re.fullmatch(r"[A-Za-z_]\w*=.*", words[0]):
+        words = words[1:]  # an environment assignment
+    for word, target in zip(words, [*words[1:], ""]):
+        if word in OUTPUT_REDIRECTS and target != "/dev/null" and not target.isdigit():
+            return True
+    if not words:
+        return False
+    program, args = Path(words[0]).name, words[1:]
+    if program == "git":
+        while args[:1] in (["-C"], ["-c"]):
+            args = args[2:]
+        return not args or args[0] not in READ_ONLY_GIT_COMMANDS
+    if program == "sed":
+        return any(re.match(r"-[^-]*i|--in-place", arg) for arg in args)
+    if program == "awk":
+        return "inplace" in args
+    return program not in READ_ONLY_PROGRAMS
+
+
+def command_can_write(command: str) -> bool:
+    """Whether a shell command can write a file.
+
+    Only a command made entirely of READ_ONLY_PROGRAMS, with no output redirection, cannot.  Any
+    other command, including one that cannot be parsed, is treated as writing.
+    """
+    lexer = shlex.shlex(command, posix=True, punctuation_chars="();<>|&\n")
+    lexer.whitespace = " \t\r"
+    lexer.whitespace_split = True
+    try:
+        tokens = list(lexer)
+    except ValueError:
+        return True
+    segment: list[str] = []
+    for token in [*tokens, ";"]:
+        if token in SHELL_SEPARATORS:
+            if _segment_can_write(segment):
+                return True
+            segment = []
+        else:
+            segment.append(token)
+    return False
+
+
 def markdown_paths(command: str, cwd: Path) -> list[Path]:
     """The Markdown files a shell command names, resolved against a leading `cd`, if any."""
     base = cwd
@@ -471,6 +541,8 @@ def _snapshot_path(event: dict) -> Path:
 
 def run_bash_pre(event: dict) -> int:
     command = (event.get("tool_input") or {}).get("command") or ""
+    if not command_can_write(command):
+        return 0  # a file that changes while it runs was changed by another process
     paths = markdown_paths(command, Path(event.get("cwd") or "."))
     if not paths:
         return 0
