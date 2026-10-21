@@ -280,9 +280,9 @@ On long-running workloads, profiler overhead is typically within system variance
 
 ## Focused-profile recipes
 
-SKILL.md's "Follow-up passes" decides when to use these: Recipe A when one function
-dominates, Recipe B when only one iteration or region matters, Recipe C when the profiler
-overhead is spread across many functions.
+The skill's section on follow-up passes says when to use these: Recipe A when one function
+dominates, Recipe B when only one iteration or region matters, Recipe C when the profiler overhead
+is spread across many functions.
 
 ### Snapshot-and-replay (Recipe A)
 
