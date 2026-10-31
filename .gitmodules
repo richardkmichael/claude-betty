@@ -1,0 +1,4 @@
+[submodule "tmux/claude-notifier/terminal-notifier"]
+	path = tmux/claude-notifier/terminal-notifier
+	url = https://github.com/julienXX/terminal-notifier.git
+	shallow = true
