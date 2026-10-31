@@ -68,6 +68,13 @@ Claude Code. Each component is self-contained and installed independently.
   or `--record-only`. A `PreToolUse` hook passes it the calling session's ID, and a second hook
   tells Claude when a window passes 90%, 95% or 99%.
 
+## tmux notifications
+
+- `tmux/` — delivers Claude Code's desktop notifications from inside tmux, with any terminal
+  application, on macOS and Linux. A `SessionStart` hook copies the session's pane output to a
+  watcher, which posts each notification naming the pane's project and its tmux session, window and
+  pane. Clicking it switches tmux to that pane. Standard library only.
+
 ## Installation
 
 ### Skills, subagents, and output styles
@@ -192,3 +199,8 @@ To combine it with another status line producer, pipe that producer into it:
 
 `mcp/quota/README.md` has the `claude mcp add` command and the `PreToolUse` hook entry. The server
 needs `uv`, and `statusline.py` installed as above.
+
+### tmux notifications
+
+`tmux/README.md` has the `settings.json` entries for the notification setting and the `SessionStart`
+hook, and covers building the macOS notifier app.
