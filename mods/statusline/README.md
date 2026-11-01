@@ -4,8 +4,7 @@ A Claude Code mod: draws this repository's status line in the band above the pro
 Desktop, which has no `statusLine` setting. In the terminal, Claude Code runs the user's
 `statusLine` command as usual and the mod draws nothing.
 
-Function hooks are early access. The mod loads only under `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1`, and
-the API it is written against may change between releases.
+Mods are on by default from v2.1.286 of the Desktop app. Their API still changes between releases.
 
 ## How it works
 
@@ -31,7 +30,6 @@ Desktop session takes no `--plugin-dir` flag, so name the mod's directory in
 ```json
 {
   "env": {
-    "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1",
     "CLAUDE_CODE_PLUGIN_DIRS": "/path/to/this-repository/mods/statusline"
   }
 }

@@ -6,9 +6,7 @@ beneath. Claude can open the same pane itself, naming the commits to show and
 a note to draw under each. A commit the user asks about rides their next
 prompt as hidden context.
 
-Function hooks are early access. The mod loads only under
-`CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1`, and the API it is written against may
-change between releases.
+Mods are on by default from Claude Code v2.1.287. Their API still changes between releases.
 
 ## Doors
 
@@ -129,7 +127,7 @@ chord to the pane drawn last.
 
 ## Development
 
-    CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude --plugin-dir mods/commits
+    claude --plugin-dir mods/commits
     claude plugin validate mods/commits
     claude plugin test mods/commits
     npx -y -p typescript@5 tsc -p mods/commits --noUnusedLocals

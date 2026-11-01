@@ -6,8 +6,9 @@ its `plugin-authoring` skill, and a live session for styling, scrolling and sele
 and tooling claims were rechecked against the 2.1.287 types and skill. Of the live-session
 observations, only the focus behaviour was rechecked in a 2.1.287 session: a `$.prompt.fill` made
 with the ring on the pane still hands the keys to the composer, and one made from a Client region's
-`ui.message` handler still leaves them where they were. The feature is in early access and moves
-quickly, so re-check anything that matters against the current types file before relying on it.
+`ui.message` handler still leaves them where they were. Mods were released in 2.1.287 and still
+change quickly, so re-check anything that matters against the current types file before relying on
+it.
 
 ## Reference material
 
@@ -45,20 +46,15 @@ The upstream mods are marked "All rights reserved". Read them for patterns; do n
 
 ## Enabling and running
 
-Mods need the function-hooks feature, which is off unless the environment variable is set:
+Mods are on by default from Claude Code 2.1.287. A mod in development loads for one session with
+`--plugin-dir`:
 
 ```
-CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude --plugin-dir /abs/path/to/mods/<name>
+claude --plugin-dir /abs/path/to/mods/<name>
 ```
 
-The variable can also be set for a project in `.claude/settings.json`, which is simpler for a
-repository where mods are developed:
-
-```json
-{
-  "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" }
-}
-```
+`CLAUDE_CODE_ENABLE_FUNCTION_HOOKS`, the early-access switch, is ignored from 2.1.287. Remove it
+from any settings that still set it.
 
 - The path is the mod's own directory, the one holding `.claude-plugin/plugin.json`.
 - Run it from any other repository by giving the absolute path.
@@ -376,7 +372,7 @@ Tests do not cover focus, placement or colour. Drive a real session in tmux:
 
 ```
 tmux new-session -d -s modtest -x 160 -y 50 -c /path/to/scratch/repo
-tmux send-keys -t modtest "unset CLAUDECODE; export CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1; \
+tmux send-keys -t modtest "unset CLAUDECODE; \
   claude --plugin-dir /abs/path/to/mods/<name> --model claude-haiku-4-5-20251001" Enter
 tmux send-keys -t modtest "/<command>" Enter
 tmux capture-pane -t modtest -p          # text

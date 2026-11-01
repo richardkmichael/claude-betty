@@ -62,8 +62,8 @@ Claude Code. Each component is self-contained and installed independently.
 
 ## Mods
 
-Mods are Claude Code plugins written against function hooks, an early-access feature that loads only
-under `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1`.
+Mods are Claude Code plugins with a hooks module. They are on by default from Claude Code v2.1.287,
+and from v2.1.286 in the Desktop app.
 
 - `commits` — `/commits` opens a pane beside the transcript listing the branch's commits, with the
   selected commit's message and diff. Claude can open the same pane, naming the commits to show. A
@@ -216,22 +216,20 @@ To combine it with another status line producer, pipe that producer into it:
 
 ### Mods
 
-Turn on function hooks and name each mod's directory, the one holding `.claude-plugin/plugin.json`,
-in the `env` block of `~/.claude/settings.json`. Several directories are separated with `:` on macOS
-and Linux:
+To load these mods in every session, the Desktop app included, name each mod's directory, the one
+holding `.claude-plugin/plugin.json`, in `CLAUDE_CODE_PLUGIN_DIRS` in the `env` block of
+`~/.claude/settings.json`. Several directories are separated with `:` on macOS and Linux:
 
 ```json
 {
   "env": {
-    "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1",
     "CLAUDE_CODE_PLUGIN_DIRS": "/path/to/this-repository/mods/commits:/path/to/this-repository/mods/statusline"
   }
 }
 ```
 
-For one terminal session,
-`CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude --plugin-dir /path/to/this-repository/mods/commits` does
-the same. The `statusline` mod also needs `statusline.py` installed as above.
+For one terminal session, `claude --plugin-dir /path/to/this-repository/mods/commits` does the same.
+The `statusline` mod also needs `statusline.py` installed as above.
 
 ### quota MCP server
 
