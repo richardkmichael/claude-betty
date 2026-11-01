@@ -42,6 +42,9 @@ Claude Code. Each component is self-contained and installed independently.
 - `markdown-format` — formats each Markdown file Claude edits: wraps at 100 columns, aligns tables,
   removes bold, and formats and lints Claude Code frontmatter. See
   `hooks/markdown-format/README.md` for setup.
+- `background-shell` — tells Claude, after each Bash command that ends up in the background, that
+  the command's shell has job control on, so stopping one of its process groups ends the task and
+  kills the stopped work. Standard library only.
 
 ## Output styles
 
@@ -152,6 +155,25 @@ matched to the `github-researcher` agent. Place both scripts where Claude Code c
 ```
 
 Pair it with the `github-researcher` subagent so denied main-thread fetches have somewhere to route.
+
+### background-shell hook
+
+`notice.py` runs as a `PostToolUse` hook on `Bash`:
+
+```json
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {"type": "command", "command": "python /path/to/this-repository/hooks/background-shell/notice.py"}
+        ]
+      }
+    ]
+  }
+}
+```
 
 ### Status line
 
