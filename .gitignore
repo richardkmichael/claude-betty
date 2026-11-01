@@ -1,3 +1,6 @@
 # Python
 __pycache__/
 *.pyc
+
+# Personal MCP server configuration, with local paths
+.mcp.json
