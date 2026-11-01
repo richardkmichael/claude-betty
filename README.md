@@ -62,8 +62,7 @@ Claude Code. Each component is self-contained and installed independently.
 
 ## Mods
 
-Mods are Claude Code plugins with a hooks module. They are on by default from Claude Code v2.1.287,
-and from v2.1.286 in the Desktop app.
+Mods are Claude Code plugins with a hooks module.
 
 - `commits` — `/commits` opens a pane beside the transcript listing the branch's commits, with the
   selected commit's message and diff. Claude can open the same pane, naming the commits to show. A
@@ -216,9 +215,12 @@ To combine it with another status line producer, pipe that producer into it:
 
 ### Mods
 
-To load these mods in every session, the Desktop app included, name each mod's directory, the one
-holding `.claude-plugin/plugin.json`, in `CLAUDE_CODE_PLUGIN_DIRS` in the `env` block of
-`~/.claude/settings.json`. Several directories are separated with `:` on macOS and Linux:
+Load a mod for one session with `claude --plugin-dir /path/to/this-repository/mods/<name>`, and
+repeat the flag to load several.
+
+To load mods in every session, list their directories in `CLAUDE_CODE_PLUGIN_DIRS`, in the `env`
+block of `~/.claude/settings.json`. This is also the only way to load a mod in Claude Code Desktop,
+which takes no flags.
 
 ```json
 {
@@ -228,8 +230,10 @@ holding `.claude-plugin/plugin.json`, in `CLAUDE_CODE_PLUGIN_DIRS` in the `env` 
 }
 ```
 
-For one terminal session, `claude --plugin-dir /path/to/this-repository/mods/commits` does the same.
-The `statusline` mod also needs `statusline.py` installed as above.
+The value is one string. Each entry is a single mod's directory, the one holding
+`.claude-plugin/plugin.json`, given as an absolute path or one starting with `~`. Entries are
+separated by `:` on macOS and Linux, and by `;` on Windows. A project's `.claude/settings.json`
+and `.claude/settings.local.json` cannot set the variable: Claude Code ignores it there.
 
 ### quota MCP server
 

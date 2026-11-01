@@ -4,8 +4,6 @@ A Claude Code mod: draws this repository's status line in the band above the pro
 Desktop, which has no `statusLine` setting. In the terminal, Claude Code runs the user's
 `statusLine` command as usual and the mod draws nothing.
 
-Mods are on by default from v2.1.286 of the Desktop app. Their API still changes between releases.
-
 ## How it works
 
 The band is redrawn each time a turn ends. The mod builds a status line payload from

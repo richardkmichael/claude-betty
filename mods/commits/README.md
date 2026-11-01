@@ -6,8 +6,6 @@ beneath. Claude can open the same pane itself, naming the commits to show and
 a note to draw under each. A commit the user asks about rides their next
 prompt as hidden context.
 
-Mods are on by default from Claude Code v2.1.287. Their API still changes between releases.
-
 ## Doors
 
 | door                  | who     | what it lists                                        |
