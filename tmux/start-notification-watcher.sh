@@ -23,6 +23,8 @@
 #   TMUX_CLAUDE_NOTIFY_SUBTITLE   tmux format for the subtitle; default in
 #                                 notification-watcher.py
 #   TMUX_CLAUDE_NOTIFY_ICON       notify-send only: the icon
+#   TMUX_CLAUDE_NOTIFY_SOUND      macOS only: the sound, or empty for none; default in
+#                                 notification-watcher.py
 #
 # Claude Code sets CLAUDE_PID and CLAUDE_CODE_SESSION_ATTENDED for hooks.  On macOS, clicking a
 # notification also brings the terminal application to the front: the one macOS records as having
@@ -69,6 +71,9 @@ if [[ -n "${__CFBundleIdentifier:-}" ]]; then
 fi
 if [[ -n "${TMUX_CLAUDE_NOTIFY_ICON:-}" ]]; then
   watcher+=(--icon "${TMUX_CLAUDE_NOTIFY_ICON}")
+fi
+if [[ -n "${TMUX_CLAUDE_NOTIFY_SOUND+set}" ]]; then
+  watcher+=(--sound "${TMUX_CLAUDE_NOTIFY_SOUND}")
 fi
 if [[ -n "${TMUX_CLAUDE_NOTIFY_SUBTITLE:-}" ]]; then
   watcher+=(--subtitle-format "${TMUX_CLAUDE_NOTIFY_SUBTITLE}")

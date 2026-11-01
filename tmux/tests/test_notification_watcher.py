@@ -135,6 +135,25 @@ def test_jump_command_quotes_for_the_shell():
     )
 
 
+@pytest.mark.parametrize(
+    ("sound", "expected"),
+    [("default", ["-sound", "default"]), ("Glass", ["-sound", "Glass"]), ("", [])],
+)
+def test_terminal_notifier_plays_the_sound(monkeypatch, sound, expected):
+    commands = []
+    monkeypatch.setattr(watcher, "_start_detached", commands.append)
+    notifier = watcher.notifier_for("/path/to/terminal-notifier", None, None, sound)
+    notifier.post(PERMISSION, "project · main:1.2", "claude-code-%5", "true")
+    command = commands[0]
+    assert command[command.index("-execute") + 2 :] == expected
+
+
+def test_sound_is_on_by_default():
+    required = ["--pane", "%5", "--socket", "s", "--tmux", "t", "--notifier", "n"]
+    arguments = watcher.parse_arguments(required)
+    assert arguments.sound == "default"
+
+
 def test_watcher_runs_on_the_python_it_is_given(tmp_path):
     """The watcher exits cleanly at end of input, posting through the given notifier."""
     log = tmp_path / "notifier.log"

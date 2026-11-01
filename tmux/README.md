@@ -124,6 +124,7 @@ Environment variables read by `start-notification-watcher.sh`, from Claude Code'
 | `TMUX_CLAUDE_NOTIFIER`        | The notifier executable, if installed with `INSTALL_DIR=` |
 | `TMUX_CLAUDE_NOTIFY_SUBTITLE` | The subtitle, as a tmux format                            |
 | `TMUX_CLAUDE_NOTIFY_ICON`     | The icon, for `notify-send` only                          |
+| `TMUX_CLAUDE_NOTIFY_SOUND`    | The sound, on macOS only                                  |
 
 The default notifier on macOS is `claude-notifier.app` in `~/Applications`, else
 `terminal-notifier`, and `notify-send` elsewhere.
@@ -131,6 +132,10 @@ The default notifier on macOS is `claude-notifier.app` in `~/Applications`, else
 The default subtitle is `#{b:pane_current_path} · #{session_name}:#{window_index}.#{pane_index}`,
 expanded for the pane when each notification arrives: the directory's name, then the pane in tmux's
 `session:window.pane` target form, such as `main:1.2`.
+
+On macOS, each notification plays the default notification sound. Set `TMUX_CLAUDE_NOTIFY_SOUND` to
+the name of another sound in `/System/Library/Sounds`, such as `Glass`, or to an empty string for
+none. The notifier app's own notification settings in System Settings can also turn the sound off.
 
 On macOS, clicking a notification also brings the terminal application to the front. The hook reads
 which one from `__CFBundleIdentifier`, which macOS sets for programs an application starts.

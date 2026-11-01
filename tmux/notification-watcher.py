@@ -47,6 +47,9 @@ READ_SIZE = 64 * 1024
 
 DEFAULT_SUBTITLE_FORMAT = "#{b:pane_current_path} · #{session_name}:#{window_index}.#{pane_index}"
 
+# terminal-notifier's name for macOS's default notification sound.
+DEFAULT_SOUND = "default"
+
 # The pane option recording which Claude Code process the pane's watcher belongs to.
 OWNER_OPTION = "@claude_notifications_pid"
 
@@ -303,15 +306,18 @@ class Pane:
 class TerminalNotifier:
     """Posts with terminal-notifier on macOS, or a build of it such as claude-notifier.app."""
 
-    def __init__(self, executable: str, activate: str | None) -> None:
+    def __init__(self, executable: str, activate: str | None, sound: str) -> None:
         self.executable = executable
         self.activate = activate
+        self.sound = sound
 
     def post(self, notification: Notification, subtitle: str, group: str, on_click: str) -> None:
         command = [self.executable, "-title", notification.title, "-message", notification.body]
         command += ["-subtitle", subtitle, "-group", group, "-execute", on_click]
         if self.activate:
             command += ["-activate", self.activate]
+        if self.sound:
+            command += ["-sound", self.sound]
         _start_detached(command)
 
 
@@ -343,10 +349,10 @@ class NotifySend:
             _start_detached(["/bin/sh", "-c", on_click])
 
 
-def notifier_for(executable: str, activate: str | None, icon: str | None):
+def notifier_for(executable: str, activate: str | None, icon: str | None, sound: str):
     if os.path.basename(executable) == "notify-send":
         return NotifySend(executable, icon)
-    return TerminalNotifier(executable, activate)
+    return TerminalNotifier(executable, activate, sound)
 
 
 def _start_detached(command: list[str]) -> None:
@@ -382,6 +388,11 @@ def parse_arguments(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--activate", help="macOS: bundle ID of the app to bring to the front")
     parser.add_argument("--icon", help="notify-send: icon file or name")
     parser.add_argument(
+        "--sound",
+        default=DEFAULT_SOUND,
+        help=f"macOS: the sound to play, or '' for none (default: {DEFAULT_SOUND!r})",
+    )
+    parser.add_argument(
         "--subtitle-format",
         default=DEFAULT_SUBTITLE_FORMAT,
         help=f"tmux format for the subtitle (default: {DEFAULT_SUBTITLE_FORMAT!r})",
@@ -392,7 +403,9 @@ def parse_arguments(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     arguments = parse_arguments(argv)
     pane = Pane(arguments.pane, arguments.socket, arguments.tmux)
-    notifier = notifier_for(arguments.notifier, arguments.activate, arguments.icon)
+    notifier = notifier_for(
+        arguments.notifier, arguments.activate, arguments.icon, arguments.sound
+    )
     if arguments.exit_with is not None:
         threading.Thread(
             target=close_pipe_when_exited, args=(pane, arguments.exit_with), daemon=True
