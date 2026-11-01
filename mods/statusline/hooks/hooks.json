@@ -1,0 +1,4 @@
+{
+  "description": "The status band: draws the session's usage above the prompt on the desktop surface and redraws it after each turn",
+  "modules": ["./register.tsx"]
+}

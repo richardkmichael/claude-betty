@@ -1,0 +1,8 @@
+{
+  "name": "statusline",
+  "version": "0.1.0",
+  "description": "Draws the session's context fill, rate-limit windows and cost in the band above the prompt on Claude Code Desktop, which has no statusLine.",
+  "author": {
+    "name": "Richard Michael"
+  }
+}
