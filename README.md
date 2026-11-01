@@ -1,6 +1,6 @@
 # Summary
 
-A collection of skills, subagents, hooks, output styles, a status line, and an MCP server for
+A collection of skills, subagents, hooks, output styles, mods, a status line, and an MCP server for
 Claude Code. Each component is self-contained and installed independently.
 
 ## Subagents
@@ -59,6 +59,20 @@ Claude Code. Each component is self-contained and installed independently.
   fit the terminal, the least important items are dropped one at a time instead of letting the
   terminal truncate at an arbitrary column. Status line rendering records quota data, which the
   `quota` MCP server reads. Standard library only.
+
+## Mods
+
+Mods are Claude Code plugins written against function hooks, an early-access feature that loads only
+under `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1`.
+
+- `commits` — `/commits` opens a pane beside the transcript listing the branch's commits, with the
+  selected commit's message and diff. Claude can open the same pane, naming the commits to show. A
+  commit the user picks goes to Claude with their next prompt. See `mods/commits/README.md`.
+- `statusline` — draws `statusline.py`'s line above the prompt on Claude Code Desktop, which has no
+  status line setting. See `mods/statusline/README.md`.
+
+`mods/DEVELOPMENT.md` collects what was learned writing them: where the reference material is, how
+to run a mod, panes, keys and focus, and what installed mods cannot do.
 
 ## MCP servers
 
@@ -199,6 +213,25 @@ To combine it with another status line producer, pipe that producer into it:
 ```
 "command": "other-producer | ~/.claude/statusline.py"
 ```
+
+### Mods
+
+Turn on function hooks and name each mod's directory, the one holding `.claude-plugin/plugin.json`,
+in the `env` block of `~/.claude/settings.json`. Several directories are separated with `:` on macOS
+and Linux:
+
+```json
+{
+  "env": {
+    "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1",
+    "CLAUDE_CODE_PLUGIN_DIRS": "/path/to/this-repository/mods/commits:/path/to/this-repository/mods/statusline"
+  }
+}
+```
+
+For one terminal session,
+`CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude --plugin-dir /path/to/this-repository/mods/commits` does
+the same. The `statusline` mod also needs `statusline.py` installed as above.
 
 ### quota MCP server
 
