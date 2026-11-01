@@ -187,6 +187,11 @@ nothing and exits 0, which Claude Code treats the same as having no status line.
 "command": "~/.claude/statusline.py --record-only"
 ```
 
+A host that has no status line of its own, such as a mod drawing the line on Claude Code Desktop,
+runs it with `--cached-limits --sections`. `--cached-limits` fills in the five-hour and seven-day
+windows from the usage cache when the payload has no rate limits, and `--sections` prints the line's
+parts as a JSON object for the host to lay out, instead of one line.
+
 Its tests run from the repository root with `uv run --with pytest pytest statusline/tests`.
 
 To combine it with another status line producer, pipe that producer into it:

@@ -161,6 +161,54 @@ def test_record_only_prints_nothing_even_when_rendering_fails(machine):
     assert drawn.stdout.startswith("statusline error:")
 
 
+def cached_usage(machine, account, five_hour_reset):
+    """A fresh usage.json for account whose plan windows read 33% and 44%."""
+    path = os.path.join(machine.state, "accounts", account, "usage.json")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+
+    def iso(epoch):
+        return time.strftime("%Y-%m-%dT%H:%M:%S+00:00", time.gmtime(epoch))
+
+    usage = {
+        "five_hour": {"utilization": 33.0, "resets_at": iso(five_hour_reset)},
+        "seven_day": {"utilization": 44.0, "resets_at": iso(time.time() + 3 * 86400)},
+    }
+    with open(path, "w") as f:
+        json.dump({"fetched_at": time.time(), "usage": usage}, f)
+
+
+NO_LIMITS = {"model": {"display_name": "Opus"}, "context_window": {"context_window_size": 200000}}
+
+
+def test_cached_limits_fill_a_payload_without_rate_limits(machine):
+    cached_usage(machine, "acc-a", time.time() + 3600)
+    assert "5h" not in machine.render("acc-a", 0, payload=NO_LIMITS).stdout
+    line = machine.render("acc-a", 0, args=["--cached-limits"], payload=NO_LIMITS).stdout
+    assert "5h 33%" in line and "7d 44%" in line
+
+
+def test_cached_limits_leave_the_payloads_own_readings_alone(machine):
+    cached_usage(machine, "acc-a", time.time() + 3600)
+    line = machine.render("acc-a", 20, args=["--cached-limits"]).stdout
+    assert "5h 20%" in line and "7d 10%" in line
+    assert machine.session_file()["rate_limits"]["five_hour"]["used_percentage"] == 20
+
+
+def test_sections_split_the_context_gauge_from_the_quota_gauges(machine):
+    result = machine.render("acc-a", 20, args=["--sections"])
+    parts = json.loads(result.stdout)
+    assert parts["context"].startswith("ctx ")
+    assert parts["quota"].startswith("5h 20%") and " | 7d 10%" in parts["quota"]
+    assert parts["where"] == ""
+    assert parts["who"] == "x | Opus"
+
+
+def test_cached_limits_drop_a_window_whose_reset_has_passed(machine):
+    cached_usage(machine, "acc-a", time.time() - 60)
+    line = machine.render("acc-a", 0, args=["--cached-limits"], payload=NO_LIMITS).stdout
+    assert "5h" not in line and "7d 44%" in line
+
+
 # ── the usage-endpoint fetch ──────────────────────────────────────────────────
 
 

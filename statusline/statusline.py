@@ -15,6 +15,12 @@ footer -- run it as `~/.claude/statusline.py --record-only`. That prints nothing
 Claude Code treats exactly as having no status line, without logging a failure the way a non-zero
 exit would.
 
+A host that has no rate-limit readings of its own, such as a mod drawing this line on Claude Code
+Desktop, runs it as `~/.claude/statusline.py --cached-limits`. A payload without rate_limits then
+takes the five-hour and seven-day windows from the usage endpoint's last answer, the same cache the
+per-model gauges are drawn from. A host that lays the line out itself adds `--sections`, which
+prints the parts as a JSON object instead of one justified line; see sections() below.
+
 Vim mode is deliberately not rendered here. Claude Code shows it on its own line beneath the status
 line, which costs no width -- so leave hideVimModeIndicator unset. The PR badge is the opposite
 case: this script draws it, so `prStatusFooterEnabled: false` turns off the duplicate in Claude
@@ -632,6 +638,26 @@ def model_windows(usage):
     return sorted(((n, p, r) for n, (p, r) in worst.items()), key=lambda w: w[1])
 
 
+def cached_limits(usage):
+    """The plan's five-hour and seven-day windows from the usage endpoint's answer, in the payload's
+    rate_limits shape, for a host whose payload carries none.
+
+    A window whose reset has passed is dropped, as in model_windows: its percentage belongs to a
+    window that has already ended. An old reading is kept, because the payload's rate_limits is
+    also what starts a fetch, so dropping it would stop the cache from ever being refreshed.
+    """
+    limits = {}
+    for key in ("five_hour", "seven_day"):
+        w = usage.get(key)
+        if not isinstance(w, dict) or not isinstance(w.get("utilization"), (int, float)):
+            continue
+        reset = iso_epoch(w.get("resets_at"))
+        if 0 < reset <= time.time():
+            continue
+        limits[key] = {"used_percentage": w["utilization"], "resets_at": reset}
+    return limits
+
+
 OUTPUT_RESERVE = 20000  # min(max_output_tokens, 20000) is held back for the reply
 COMPACT_FLOOR = 13000  # auto-compaction fires this far below the usable window by default
 
@@ -896,7 +922,22 @@ def fit(data, width, cfg):
     return ""
 
 
-def main(record_only):
+def sections(data, cfg):
+    """The line's parts as JSON, for a host that lays them out itself rather than in a terminal row.
+
+    The context gauge is split from the quota gauges it shares the left section with, so the host
+    can place the two apart. Nothing is dropped to fit, because the host has no width to give.
+    """
+    items = build(data, cfg)
+    context = [i for i in items if DROP_ORDER[i[0]] == "ctx"]
+    quota, where, who = assemble([i for i in items if DROP_ORDER[i[0]] != "ctx"])
+    return json.dumps(
+        {"context": assemble(context)[LEFT], "quota": quota, "where": where, "who": who},
+        ensure_ascii=False,
+    )
+
+
+def main(record_only, use_cached_limits=False, as_sections=False):
     try:
         data = json.load(sys.stdin)
     except Exception:
@@ -906,12 +947,17 @@ def main(record_only):
     # recording gone stale as an error, so a failure here still surfaces where it matters.
     with contextlib.suppress(Exception):
         record(data, cfg)
+    # Filled in after recording, so a window read from the cache is never recorded as the payload's.
+    if use_cached_limits and not data.get("rate_limits"):
+        data["rate_limits"] = cached_limits(usage_cache(account_uuid(cfg))[0])
     if record_only:
         # Nothing is drawn, but the per-model figures are still kept fresh for the MCP server.
         account = account_uuid(cfg)
         _, age = usage_cache(account)
         refresh_usage(age, bool(data.get("rate_limits")), account)
         return ""
+    if as_sections:
+        return sections(data, cfg)
     width = render_width()
     if os.environ.get("CLAUDE_STATUSLINE_RULER"):
         # Every tenth column is marked; the final column is '#'. Whether '#' survives tells you
@@ -928,7 +974,9 @@ if __name__ == "__main__":
         sys.exit(0)
     record_only = "--record-only" in sys.argv[1:]
     try:
-        line = main(record_only)
+        line = main(
+            record_only, "--cached-limits" in sys.argv[1:], "--sections" in sys.argv[1:]
+        )
     except Exception as exc:
         # Never blank the line over a rendering bug; show enough to debug it. A record-only run
         # draws nothing even then: it stands in for having no status line at all.
