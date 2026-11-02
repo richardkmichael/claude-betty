@@ -83,13 +83,14 @@ SELECT tool_name, indexed_fields
  ORDER BY tool_name;
 ```
 
-Each `indexed_fields` value is a JSON array of `{"path", "fts_table", "fts_column"}` objects.
-Use `fts_table` and `fts_column` from those results to build the JOIN:
+Each `indexed_fields` value is a JSON array of `{"path", "fts_table", "fts_column"}` objects. Use
+`fts_table` and `fts_column` from those results to build the JOIN.  An FTS row's `rowid` is the
+`tool_events.id` of the event it indexes:
 
 ```sql
 SELECT e.created_at, json_extract(e.payload, '$.tool_input.command')
   FROM tool_events e
-  JOIN fts_bash_command f ON f.event_id = e.id
+  JOIN fts_bash_command f ON f.rowid = e.id
  WHERE f.command MATCH '"git commit"'
    AND e.hook_event_name = 'PreToolUse'
  ORDER BY e.created_at DESC;
@@ -144,7 +145,7 @@ SELECT json_extract(payload, '$.tool_input.file_path'), created_at
 Filter Bash commands by text, through FTS:
 
 ```sql
-JOIN fts_bash_command f ON f.event_id = e.id
+JOIN fts_bash_command f ON f.rowid = e.id
 WHERE f.command MATCH '"git"' AND e.hook_event_name = 'PreToolUse'
 ```
 
