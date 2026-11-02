@@ -426,16 +426,95 @@ mod tests {
             .unwrap();
         assert_eq!(count, 1);
 
-        // FTS5 MATCH search works
-        let found: i32 = db
+        // FTS5 MATCH search works, and the FTS rowid is the tool_events id
+        let event_id: i64 = db
+            .conn
+            .query_row("SELECT id FROM tool_events WHERE session_id = 'fts_test'", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        let found: i64 = db
             .conn
             .query_row(
-                "SELECT COUNT(*) FROM fts_bash_command WHERE command MATCH 'git'",
+                "SELECT rowid FROM fts_bash_command WHERE command MATCH 'git'",
                 [],
                 |row| row.get(0),
             )
             .unwrap();
-        assert_eq!(found, 1);
+        assert_eq!(found, event_id);
+
+        // The FTS table stores the text, so LIKE on its column works
+        let liked: i64 = db
+            .conn
+            .query_row(
+                "SELECT rowid FROM fts_bash_command WHERE command LIKE '%t st%'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(liked, event_id);
+    }
+
+    fn fts_rowids(db: &Database, table: &str, term: &str) -> Vec<i64> {
+        let sql = format!("SELECT rowid FROM {table} WHERE {table} MATCH ?1 ORDER BY rowid");
+        let mut stmt = db.conn.prepare(&sql).unwrap();
+        stmt.query_map([term], |row| row.get(0))
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap()
+    }
+
+    #[test]
+    fn test_fts5_delete_trigger_removes_entry() {
+        let db = create_test_db();
+        db.insert_event(r#"{"session_id":"keep","tool_name":"Bash","hook_event_name":"PreToolUse","tool_input":{"command":"git status"}}"#).unwrap();
+        db.insert_event(r#"{"session_id":"drop","tool_name":"Bash","hook_event_name":"PreToolUse","tool_input":{"command":"git log"}}"#).unwrap();
+        db.insert_event(r#"{"session_id":"drop","tool_name":"Read","hook_event_name":"PreToolUse","tool_input":{"file_path":"/repo/.git/config"}}"#).unwrap();
+
+        db.conn
+            .execute("DELETE FROM tool_events WHERE session_id = 'drop'", [])
+            .unwrap();
+
+        let kept_id: i64 = db
+            .conn
+            .query_row("SELECT id FROM tool_events WHERE session_id = 'keep'", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(fts_rowids(&db, "fts_bash_command", "\"git\""), vec![kept_id]);
+        assert!(fts_rowids(&db, "fts_file_path", "\"git\"").is_empty());
+    }
+
+    #[test]
+    fn test_fts5_update_trigger_reindexes_entry() {
+        let db = create_test_db();
+        db.insert_event(r#"{"session_id":"upd","tool_name":"Bash","hook_event_name":"PreToolUse","tool_input":{"command":"cargo build"}}"#).unwrap();
+        let id: i64 = db
+            .conn
+            .query_row("SELECT id FROM tool_events WHERE session_id = 'upd'", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+
+        // New text replaces the old in the index
+        db.conn
+            .execute(
+                r#"UPDATE tool_events SET payload = '{"session_id":"upd","tool_name":"Bash","hook_event_name":"PreToolUse","tool_input":{"command":"cargo test"}}' WHERE id = ?1"#,
+                [id],
+            )
+            .unwrap();
+        assert!(fts_rowids(&db, "fts_bash_command", "\"build\"").is_empty());
+        assert_eq!(fts_rowids(&db, "fts_bash_command", "\"test\""), vec![id]);
+
+        // Changing the tool moves the entry to the other tool's table
+        db.conn
+            .execute(
+                r#"UPDATE tool_events SET payload = '{"session_id":"upd","tool_name":"Read","hook_event_name":"PreToolUse","tool_input":{"file_path":"/tmp/test.txt"}}' WHERE id = ?1"#,
+                [id],
+            )
+            .unwrap();
+        assert!(fts_rowids(&db, "fts_bash_command", "\"test\"").is_empty());
+        assert_eq!(fts_rowids(&db, "fts_file_path", "\"test\""), vec![id]);
     }
 
     #[test]

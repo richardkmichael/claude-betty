@@ -57,6 +57,9 @@ python tools/migration/migrate_to_v2.py your_existing_monitor.db
 # Migrate V2 → V3 (adds FTS5 search, expression indexes, expanded hook coverage)
 python tools/migration/migrate_to_v3.py your_existing_monitor.db
 
+# Migrate V3.0 → V3.1 (FTS5 tables keyed by event id, delete and update triggers)
+python tools/migration/migrate_to_v3_1.py your_existing_monitor.db
+
 # Validate schemas work correctly
 python tools/validation/validate_against_schemas.py your_existing_monitor.db
 ```
@@ -87,7 +90,10 @@ python tools/validation/validate_against_schemas.py your_existing_monitor.db
 - `transcript_path` - path to session transcript
 
 ### FTS5 Tables (Wildcard Search)
-Use `JOIN fts_bash_command ON fts_bash_command.event_id = tool_events.id WHERE fts_bash_command.command MATCH '"term"'`
+Use `JOIN fts_bash_command f ON f.rowid = tool_events.id WHERE f.command MATCH '"term"'`
+
+Each FTS table's `rowid` is the `tool_events.id` of the event it indexes.  Triggers keep the FTS
+tables in step with `tool_events` on insert, delete and update.
 
 | Table | Field | Tools |
 |---|---|---|
@@ -121,6 +127,15 @@ Migrates V2 databases to V3 schema. Creates backups automatically.
 
 ```bash
 python tools/migration/migrate_to_v3.py monitor.db
+```
+
+### `tools/migration/migrate_to_v3_1.py`
+Migrates V3.0 databases to V3.1: FTS5 tables keyed by `tool_events.id`, with delete and update
+triggers.  Runs while the hook is writing, in short transactions with pauses between them, and
+resumes where it stopped if interrupted.
+
+```bash
+python tools/migration/migrate_to_v3_1.py monitor.db
 ```
 
 ### `tools/validation/validate_against_schemas.py`
@@ -170,7 +185,7 @@ SELECT tool_name, COUNT(*)
 -- Bash commands containing a pattern (FTS5 wildcard search)
 SELECT e.created_at, json_extract(e.payload, '$.tool_input.command')
   FROM tool_events e
-  JOIN fts_bash_command f ON f.event_id = e.id
+  JOIN fts_bash_command f ON f.rowid = e.id
  WHERE f.command MATCH '"git"'
  ORDER BY e.created_at DESC;
 
