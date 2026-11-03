@@ -10,11 +10,14 @@ the hook payload.  In transcript mode (CTRL-R), `stdout` from the hook is shown 
 
 ### New Installations
 
-Install to `~/bin/claude-tool-monitor`:
+Build the release binary and link it onto your `PATH` as `tool-monitor`:
 
 ```bash
-cargo install --path . --root ~
+cargo build --release
+ln -s "$PWD/target/release/claude-tool-monitor" ~/bin/tool-monitor
 ```
+
+The hooks run the binary through the link, so a later `cargo build --release` updates them in place.
 
 Run `claude` and configure `/hooks`, or directly edit `.claude/settings.json`:
 
@@ -24,25 +27,25 @@ Run `claude` and configure `/hooks`, or directly edit `.claude/settings.json`:
     "PreToolUse": [
       {
         "matcher": "*",
-        "hooks": [{"type": "command", "command": "claude-tool-monitor ~/.claude/tool-monitor.sqlite"}]
+        "hooks": [{"type": "command", "command": "tool-monitor ~/.claude/tool-monitor.sqlite"}]
       }
     ],
     "PostToolUse": [
       {
         "matcher": "*",
-        "hooks": [{"type": "command", "command": "claude-tool-monitor ~/.claude/tool-monitor.sqlite"}]
+        "hooks": [{"type": "command", "command": "tool-monitor ~/.claude/tool-monitor.sqlite"}]
       }
     ],
     "PostToolUseFailure": [
       {
         "matcher": "*",
-        "hooks": [{"type": "command", "command": "claude-tool-monitor ~/.claude/tool-monitor.sqlite"}]
+        "hooks": [{"type": "command", "command": "tool-monitor ~/.claude/tool-monitor.sqlite"}]
       }
     ],
     "PermissionRequest": [
       {
         "matcher": "*",
-        "hooks": [{"type": "command", "command": "claude-tool-monitor ~/.claude/tool-monitor.sqlite"}]
+        "hooks": [{"type": "command", "command": "tool-monitor ~/.claude/tool-monitor.sqlite"}]
       }
     ]
   }
