@@ -138,6 +138,72 @@ resumes where it stopped if interrupted.
 python tools/migration/migrate_to_v3_1.py monitor.db
 ```
 
+### `tools/maintenance/archive_events.py`
+Moves old events out of the live database into a compressed SQLite archive, and shrinks the live
+database.  Run it whenever the database has grown larger than you want.  It keeps the last 30 days
+by default.
+
+Close every Claude Code session first; the script refuses to run while any is open.
+
+```bash
+# Keep the last 30 days; the archive goes next to the database
+python tools/maintenance/archive_events.py ~/.claude/tool-monitor.sqlite
+
+# Archive everything before a date
+python tools/maintenance/archive_events.py --before YYYY-MM-DD ~/.claude/tool-monitor.sqlite
+
+# Keep 60 days, and write the archive to another volume
+python tools/maintenance/archive_events.py --days 60 --archive-dir /Volumes/backup \
+    ~/.claude/tool-monitor.sqlite
+```
+
+The archive is named for the dates it covers, e.g. `tool-monitor-archive-<first>_<last>.sqlite.zst`.
+It holds `tool_events` (`id`, `session_id`, `payload`, `created_at`) and an `archive_info` table
+recording the source database, its schema version and the archived range.
+
+Steps, each timed in the output:
+
+1. Copy the old events to the archive, and verify the copy before deleting anything.
+2. Delete the events in one statement.  The FTS delete triggers remove their search entries.
+3. Fully merge the FTS indexes, dropping the deletion markers the deletes left.
+4. Compact: write the remaining data to a new file with `VACUUM INTO`, verify it, and swap it in.
+   The previous file is kept as `tool-monitor-old.sqlite`.
+5. Compress the archive with `zstd`, check it decompresses to the same bytes, and remove the
+   uncompressed copy.
+
+An interrupted run resumes where it stopped when rerun.  When the run finishes, start Claude Code,
+make a tool call, confirm the hook wrote to the database (the script prints the query), then delete
+`tool-monitor-old.sqlite`.
+
+`--online` archives while Claude Code is in use.  Every write is a short transaction: events are
+deleted in batches, the FTS indexes are merged in bounded steps, and freed pages are returned to the
+disk with bounded `PRAGMA incremental_vacuum` calls.  It is much slower than compacting offline, and
+it needs `auto_vacuum=INCREMENTAL`.  With other sessions running, add `--pause` to give their hooks
+more room on the lock.
+
+Requirements:
+- Schema 3.1 or later, for the FTS delete triggers.
+- Free space for the archive and, offline, for the compacted file.  The script checks both.
+- `zstd` on `PATH`.
+
+To query an archive, decompress it and attach it:
+
+```bash
+zstd -d tool-monitor-archive-<first>_<last>.sqlite.zst
+sqlite3 -readonly tool-monitor-archive-<first>_<last>.sqlite \
+    "SELECT created_at, json_extract(payload, '$.tool_input.command') FROM tool_events
+      WHERE json_extract(payload, '$.tool_name') = 'Bash' LIMIT 10;"
+```
+
+To restore archived events into the live database, insert them back; the insert triggers rebuild
+their FTS entries, and the ids never collide with newer events:
+
+```sql
+ATTACH 'tool-monitor-archive-<first>_<last>.sqlite' AS archive;
+INSERT INTO tool_events (id, session_id, payload, created_at)
+SELECT id, session_id, payload, created_at FROM archive.tool_events;
+```
+
 ### `tools/validation/validate_against_schemas.py`
 Validates database payloads against JSON schemas using `uvx check-jsonschema`.
 
