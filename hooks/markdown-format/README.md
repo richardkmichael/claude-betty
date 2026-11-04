@@ -11,8 +11,9 @@ For each changed `.md` or `.markdown` file, `format.py`:
    1., 2., 3. without zero padding, aligns tables, removes bold (`mdformat-no-bold`) and keeps
    existing two spaces after a sentence (`mdformat-sentence-spacing`).  Unchanged blocks and list
    items are left as they are, so a small edit to an unformatted file gives a small diff.  A list
-   whose numbering has a gap is renumbered whole.  Indented code blocks stay indented.  A new file
-   is formatted whole, with indented code blocks fenced.
+   whose numbering has a gap is renumbered whole.  Indented code blocks stay indented.  Wiki links
+   such as `[[name]]`, which Claude Code's memory files use to link to each other, keep their
+   brackets unescaped.  A new file is formatted whole, with indented code blocks fenced.
 2. Formats the YAML frontmatter with `claude-yaml` when it changed, keeping comments.  When the file
    is a Claude Code configuration file (an agent, skill, output style or memory file), `claude-yaml`
    also lints the frontmatter against the Claude Code schema.

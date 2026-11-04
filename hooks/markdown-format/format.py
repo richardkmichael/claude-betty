@@ -23,10 +23,10 @@ Given paths instead of a hook event, it formats those files whole, e.g. to bring
 repository into line once.
 
 The body is formatted by mdformat: wrapped at WRAP_WIDTH, ordered lists numbered 1., 2., 3.,
-tables aligned, bold removed and existing double spaces after sentences kept.  Frontmatter that
-changed is formatted and linted by claude-yaml.  A file is written only if the result renders the
-same HTML as before, apart from removed bold.  Lint problems are returned to Claude as additional
-context.
+tables aligned, bold removed, existing double spaces after sentences kept and wiki links ([[name]])
+left unescaped.  Frontmatter that changed is formatted and linted by claude-yaml.  A file is
+written only if the result renders the same HTML as before, apart from removed bold.  Lint problems
+are returned to Claude as additional context.
 
 Besides the dependencies above, this needs the mdformat-no-bold, mdformat-sentence-spacing and
 claude-yaml packages, passed with `uv run --with`.  See README.md.
@@ -51,6 +51,8 @@ import mdformat
 import mdformat.plugins
 from claude_yaml import Diagnostic, Document, check_frontmatter
 from markdown_it import MarkdownIt
+from markdown_it.common.utils import normalizeReference
+from markdown_it.rules_inline import StateInline
 from mdformat.renderer import DEFAULT_RENDERERS, RenderContext, RenderTreeNode
 from mdformat.renderer._util import get_list_marker_type, is_tight_list
 
@@ -62,6 +64,7 @@ PLUGIN_RULES = {
     "no_bold": "bold removed",
     "sentence_spacing": None,  # keeps the author's spacing, so nothing to report
     "indented_code": None,  # keeps edited code blocks as written, so nothing to report
+    "wiki_links": None,  # keeps [[name]] as written, so nothing to report
 }
 EXTENSIONS = set(PLUGIN_RULES)
 MDFORMAT_OPTIONS = {"wrap": WRAP_WIDTH}
@@ -184,6 +187,44 @@ class _IndentedCode:
 
 
 mdformat.plugins.PARSER_EXTENSIONS["indented_code"] = _IndentedCode
+
+# A wiki link, [[name]], as Claude Code's memory instructions use to link one memory file to
+# another.  Followed by "(" or "[", the brackets belong to a CommonMark link instead.
+WIKI_LINK = re.compile(r"\[\[([^\[\]\n]+)\]\](?![(\[])")
+
+
+def _wiki_link_rule(state: StateInline, silent: bool) -> bool:
+    # In silent mode markdown-it is scanning a link's text for its closing bracket, and reads any
+    # token longer than "[" there as a nested link, which rejects the link.  Matching nothing
+    # lets the scan count the brackets one by one.
+    if silent:
+        return False
+    match = WIKI_LINK.match(state.src, state.pos)
+    if match is None:
+        return False
+    # With a definition for [name], the inner brackets are a CommonMark reference link.
+    if normalizeReference(match.group(1)) in state.env.get("references", {}):
+        return False
+    token = state.push("wiki_link", "", 0)
+    token.content = match.group()
+    state.pos = match.end()
+    return True
+
+
+class _WikiLinks:
+    """An mdformat plugin writing wiki links as written, registered as "wiki_links".
+
+    CommonMark has no wiki links, so mdformat escapes their brackets: \\[[name]\\].
+    """
+
+    RENDERERS: ClassVar = {"wiki_link": lambda node, context: node.content}
+
+    @staticmethod
+    def update_mdit(mdit: MarkdownIt) -> None:
+        mdit.inline.ruler.before("link", "wiki_link", _wiki_link_rule)
+
+
+mdformat.plugins.PARSER_EXTENSIONS["wiki_links"] = _WikiLinks
 
 
 @dataclass

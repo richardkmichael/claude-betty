@@ -68,6 +68,32 @@ def test_ordered_lists_not_zero_padded(tmp_path: Path) -> None:
     assert lines[8:11] == ["9. item 9 " + "word " * 17 + "word", "   word word", "10. item 10"]
 
 
+@pytest.mark.parametrize(
+    "text",
+    [
+        "See [[a-memory]] and [[another one]].\n",
+        "- [Title](a.md) — see [[a-memory]]\n",
+        "Link [see [[a-memory]]](https://example.com).\n",
+        "Embed ![[image.png]].\n",
+    ],
+)
+def test_wiki_links_left_unescaped(tmp_path: Path, text: str) -> None:
+    path = write(tmp_path / "doc.md", text)
+    assert not markdown_format.format_file(path).changed
+
+
+def test_wiki_link_kept_whole_when_wrapping(tmp_path: Path) -> None:
+    path = write(tmp_path / "doc.md", "word " * 17 + "[[a memory name]] tail\n")
+    markdown_format.format_file(path)
+    assert path.read_text() == "word " * 16 + "word\n[[a memory name]] tail\n"
+
+
+def test_reference_link_in_double_brackets_escaped(tmp_path: Path) -> None:
+    path = write(tmp_path / "doc.md", "See [[x]].\n\n[x]: https://example.com\n")
+    markdown_format.format_file(path)
+    assert path.read_text() == "See \\[[x]\\].\n\n[x]: https://example.com\n"
+
+
 def test_unchanged_file_not_written(tmp_path: Path) -> None:
     path = write(tmp_path / "doc.md", "Already tidy.\n")
     before = path.stat().st_mtime_ns
