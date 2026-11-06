@@ -206,11 +206,11 @@ usage endpoint reports, so the script fetches it itself. Once the data for the l
 login's access token from the Keychain (or from `.credentials.json` off macOS) without renewing it.
 The request costs no tokens, the fetch is detached so no render ever waits on it, and a lock file
 keeps concurrent sessions to one fetch every 90 seconds between them. When the endpoint rate-limits
-a fetch, which it does without saying how long to wait, the next attempt waits at least five
-minutes, and every attempt is logged so the undocumented limit can be read off. The answers are kept
-under `~/.local/state/claude-statusline-quota/`, one directory per account. A value too old to trust
-reads `STL` in place of the percentage rather than quietly showing a stale number. This is the only
-part of the script that reaches beyond reading a file.
+a fetch, the next attempt waits as long as the endpoint says, and never less than five minutes,
+because it usually says to retry at once. Every attempt is logged so the undocumented limit can be
+read off. The answers are kept under `~/.local/state/claude-statusline-quota/`, one directory per
+account. A value too old to trust reads `STL` in place of the percentage rather than quietly showing
+a stale number. This is the only part of the script that reaches beyond reading a file.
 
 Status line rendering also records quota data under the same directory, which the `quota` MCP
 server reads. `mcp/quota/schemas/` defines the files, and `statusline/RECORDING.md` describes how

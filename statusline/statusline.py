@@ -221,7 +221,7 @@ def claude_account(cfg):
 USAGE_FETCH_INTERVAL = 90  # fetch the per-model figures once they are older than this
 USAGE_STALE_AFTER = 300  # past this several fetches have plainly failed, so mark the figure
 FETCH_TIMEOUT = 15  # seconds the detached fetch waits on the endpoint
-USAGE_RATE_LIMIT_BACKOFF = 300  # least wait after a 429, which carries Retry-After: 0
+USAGE_RATE_LIMIT_BACKOFF = 300  # least wait after a 429, whatever its Retry-After
 
 USAGE_ENDPOINT = "https://api.anthropic.com/api/oauth/usage"
 OAUTH_BETA = "oauth-2025-04-20"
@@ -384,8 +384,9 @@ def fetch_usage(account):
 
     A 429 moves the lock's timestamp forward, so the renders that follow wait before trying again
     instead of retrying on the usual cadence. The wait is the Retry-After it carries, but never
-    less than USAGE_RATE_LIMIT_BACKOFF: the endpoint sends `Retry-After: 0`, which taken at its word
-    has every render in every session retry at once, a request every few seconds.
+    less than USAGE_RATE_LIMIT_BACKOFF. The endpoint usually sends `Retry-After: 0`, which taken at
+    its word has every render in every session retry at once, a request every few seconds. After
+    repeated 429s it has sent a Retry-After of an hour, which is honoured in full.
     """
     # Imported here rather than at the top: urllib.request alone takes about as long to import as a
     # whole render does to run, and only this detached child ever makes a request.
