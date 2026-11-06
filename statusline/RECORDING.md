@@ -43,7 +43,7 @@ until the new account's first fetch has landed.
 ## accounts/<account_uuid>/usage.json
 
 Schema: `mcp/quota/schemas/usage.schema.json`. The per-model windows are the entries of
-`usage.limits` whose `scope.model.display_name` is set. The file is replaced about once a minute
+`usage.limits` whose `scope.model.display_name` is set. The file is replaced about every 90 seconds
 while any session on the account is drawing the line.
 
 ## accounts/<account_uuid>/history/*.jsonl
@@ -81,4 +81,4 @@ arrives. It is the current login's reading when all of these hold:
 ## Retention
 
 Session files are deleted seven days after their last write, and history and fetch-log files nine
-days after their last append. The fetch that runs about once a minute does the pruning.
+days after their last append. The fetch that runs about every 90 seconds does the pruning.

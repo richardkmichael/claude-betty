@@ -53,7 +53,7 @@ payload does not carry. The per-model quota windows are in neither: the payload'
 covers the plan's own five-hour and seven-day windows and nothing else, and the per-model figures
 exist only at Anthropic's OAuth usage endpoint.
 
-So once the figures for the logged-in account are a minute old, a render starts this same script
+So once the figures for the logged-in account are 90 seconds old, a render starts this same script
 detached to fetch the endpoint again, reading the login's access token from the Keychain (or from
 .credentials.json off macOS) without ever renewing it. The answer is kept under the state directory,
 one subdirectory per account, and a lock file there stops every render of every open session
@@ -215,7 +215,10 @@ def claude_account(cfg):
     return email.split("@")[0]
 
 
-USAGE_FETCH_INTERVAL = 60  # fetch the per-model figures once they are older than this
+# The endpoint allows about five requests per five minutes per account, shared with Claude Code's
+# own /usage and with other machines. Fetching every minute sits on that limit and draws a 429
+# every few minutes; repeated 429s have drawn a one-hour Retry-After.
+USAGE_FETCH_INTERVAL = 90  # fetch the per-model figures once they are older than this
 USAGE_STALE_AFTER = 300  # past this several fetches have plainly failed, so mark the figure
 FETCH_TIMEOUT = 15  # seconds the detached fetch waits on the endpoint
 USAGE_RATE_LIMIT_BACKOFF = 300  # least wait after a 429, which carries Retry-After: 0

@@ -9,8 +9,8 @@
 It fetches nothing. statusline.py records every figure it draws, and this server reads those
 recordings, so the tool answers with exactly what the status line shows: the five-hour and
 seven-day plan windows as of the session's last API response, and the per-model weekly windows as
-of the last usage-endpoint fetch, about a minute old at most. statusline/RECORDING.md describes the
-layout this reads.
+of the last usage-endpoint fetch, about 90 seconds old at most. statusline/RECORDING.md describes
+the layout this reads.
 
 Stale data is an error, never a number. A recording that stopped being updated reads as quota not
 being spent at all, which is the most misleading answer this tool could give, so every figure is
@@ -402,7 +402,7 @@ def check(session):
         raise ToolError(
             "The quota data on hand is not the logged-in account's yet. After /login a session "
             "can go on reporting the previous account's quota for several responses, and the new "
-            "account's is recognised once its first usage fetch lands, within a minute. Call "
+            "account's is recognised once its first usage fetch lands, within 90 seconds. Call "
             "get-quota again after the next response."
         )
 
