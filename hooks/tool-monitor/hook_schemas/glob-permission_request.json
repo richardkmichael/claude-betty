@@ -1,0 +1,118 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Glob PermissionRequest Schema",
+  "description": "JSON Schema for Glob tool PermissionRequest events.  The tool-specific fields predate the captured payloads and are unverified",
+  "type": "object",
+  "properties": {
+    "session_id": {
+      "type": "string"
+    },
+    "prompt_id": {
+      "type": "string",
+      "description": "UUID of the user prompt being processed; absent before the first prompt"
+    },
+    "transcript_path": {
+      "type": "string"
+    },
+    "cwd": {
+      "type": "string"
+    },
+    "scratchpad_dir": {
+      "type": "string"
+    },
+    "permission_mode": {
+      "type": "string",
+      "description": "default, plan, acceptEdits, auto, dontAsk or bypassPermissions"
+    },
+    "effort": {
+      "type": "object",
+      "properties": {
+        "level": {
+          "type": "string",
+          "description": "low, medium, high, xhigh or max"
+        }
+      }
+    },
+    "agent_id": {
+      "type": "string",
+      "description": "Present when the call is made inside a subagent"
+    },
+    "agent_type": {
+      "type": "string",
+      "description": "Present inside a subagent, or in a session started with --agent"
+    },
+    "hook_event_name": {
+      "const": "PermissionRequest"
+    },
+    "tool_name": {
+      "const": "Glob"
+    },
+    "tool_input": {
+      "type": "object",
+      "properties": {
+        "pattern": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "pattern"
+      ]
+    },
+    "permission_suggestions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "description": "addRules, replaceRules, removeRules, setMode, addDirectories or removeDirectories"
+          },
+          "rules": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "toolName": {
+                  "type": "string"
+                },
+                "ruleContent": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "behavior": {
+            "type": "string"
+          },
+          "mode": {
+            "type": "string"
+          },
+          "directories": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "destination": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "destination"
+        ]
+      }
+    }
+  },
+  "required": [
+    "session_id",
+    "transcript_path",
+    "cwd",
+    "hook_event_name",
+    "tool_name",
+    "tool_input"
+  ]
+}

@@ -1,0 +1,101 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "SendMessage PreToolUse Schema",
+  "description": "JSON Schema for SendMessage tool PreToolUse events, derived from captured payloads",
+  "type": "object",
+  "properties": {
+    "session_id": {
+      "type": "string"
+    },
+    "prompt_id": {
+      "type": "string",
+      "description": "UUID of the user prompt being processed; absent before the first prompt"
+    },
+    "transcript_path": {
+      "type": "string"
+    },
+    "cwd": {
+      "type": "string"
+    },
+    "scratchpad_dir": {
+      "type": "string"
+    },
+    "permission_mode": {
+      "type": "string",
+      "description": "default, plan, acceptEdits, auto, dontAsk or bypassPermissions"
+    },
+    "effort": {
+      "type": "object",
+      "properties": {
+        "level": {
+          "type": "string",
+          "description": "low, medium, high, xhigh or max"
+        }
+      }
+    },
+    "agent_id": {
+      "type": "string",
+      "description": "Present when the call is made inside a subagent"
+    },
+    "agent_type": {
+      "type": "string",
+      "description": "Present inside a subagent, or in a session started with --agent"
+    },
+    "hook_event_name": {
+      "const": "PreToolUse"
+    },
+    "tool_name": {
+      "const": "SendMessage"
+    },
+    "tool_use_id": {
+      "type": "string"
+    },
+    "tool_input": {
+      "type": "object",
+      "properties": {
+        "content": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "notify_when_idle": {
+          "type": "boolean"
+        },
+        "recipient": {
+          "type": "string"
+        },
+        "recipient_kind": {
+          "type": "string"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "to": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "content",
+        "message",
+        "recipient",
+        "recipient_kind",
+        "summary",
+        "to",
+        "type"
+      ]
+    }
+  },
+  "required": [
+    "session_id",
+    "transcript_path",
+    "cwd",
+    "hook_event_name",
+    "tool_name",
+    "tool_input",
+    "tool_use_id"
+  ]
+}

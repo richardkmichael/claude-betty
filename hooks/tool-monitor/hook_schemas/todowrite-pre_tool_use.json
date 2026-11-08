@@ -1,5 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
+  "$comment": "Obsolete. Claude Code no longer has a TodoWrite tool; see TaskCreate and TaskUpdate.",
   "type": "object",
   "properties": {
     "session_id": {
@@ -70,6 +71,6 @@
     "tool_name",
     "tool_input"
   ],
-  "title": "TodoWrite PreToolUse Schema",
+  "title": "TodoWrite PreToolUse Schema (obsolete)",
   "description": "JSON Schema for TodoWrite tool PreToolUse events"
 }

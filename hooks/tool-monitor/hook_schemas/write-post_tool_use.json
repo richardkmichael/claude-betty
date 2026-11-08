@@ -1,9 +1,15 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Write PostToolUse Schema",
+  "description": "JSON Schema for Write tool PostToolUse events, derived from captured payloads",
   "type": "object",
   "properties": {
     "session_id": {
       "type": "string"
+    },
+    "prompt_id": {
+      "type": "string",
+      "description": "UUID of the user prompt being processed; absent before the first prompt"
     },
     "transcript_path": {
       "type": "string"
@@ -11,37 +17,113 @@
     "cwd": {
       "type": "string"
     },
+    "scratchpad_dir": {
+      "type": "string"
+    },
+    "permission_mode": {
+      "type": "string",
+      "description": "default, plan, acceptEdits, auto, dontAsk or bypassPermissions"
+    },
+    "effort": {
+      "type": "object",
+      "properties": {
+        "level": {
+          "type": "string",
+          "description": "low, medium, high, xhigh or max"
+        }
+      }
+    },
+    "agent_id": {
+      "type": "string",
+      "description": "Present when the call is made inside a subagent"
+    },
+    "agent_type": {
+      "type": "string",
+      "description": "Present inside a subagent, or in a session started with --agent"
+    },
     "hook_event_name": {
       "const": "PostToolUse"
     },
     "tool_name": {
+      "const": "Write"
+    },
+    "tool_use_id": {
       "type": "string"
     },
     "tool_input": {
       "type": "object",
       "properties": {
-        "file_path": {
+        "content": {
           "type": "string"
         },
-        "content": {
+        "file_path": {
           "type": "string"
         }
       },
       "required": [
-        "file_path",
-        "content"
+        "content",
+        "file_path"
       ]
     },
     "tool_response": {
       "type": "object",
       "properties": {
+        "content": {
+          "type": "string"
+        },
         "filePath": {
           "type": "string"
         },
-        "content": {
+        "memdirStamped": {
+          "type": "boolean"
+        },
+        "originalFile": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "structuredPatch": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "lines": {
+                "type": "array"
+              },
+              "newLines": {
+                "type": "number"
+              },
+              "newStart": {
+                "type": "number"
+              },
+              "oldLines": {
+                "type": "number"
+              },
+              "oldStart": {
+                "type": "number"
+              }
+            }
+          }
+        },
+        "type": {
           "type": "string"
+        },
+        "userModified": {
+          "type": "boolean"
         }
-      }
+      },
+      "required": [
+        "content",
+        "filePath",
+        "originalFile",
+        "structuredPatch",
+        "type",
+        "userModified"
+      ]
+    },
+    "duration_ms": {
+      "type": "number"
     }
   },
   "required": [
@@ -51,8 +133,7 @@
     "hook_event_name",
     "tool_name",
     "tool_input",
+    "tool_use_id",
     "tool_response"
-  ],
-  "title": "Write PostToolUse Schema",
-  "description": "JSON Schema for Write tool PostToolUse events"
+  ]
 }

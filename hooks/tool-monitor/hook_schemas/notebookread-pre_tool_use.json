@@ -1,5 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
+  "$comment": "Obsolete. Claude Code no longer has a NotebookRead tool; Read reads notebooks.",
   "type": "object",
   "properties": {
     "session_id": {
@@ -40,6 +41,6 @@
     "tool_name",
     "tool_input"
   ],
-  "title": "NotebookRead PreToolUse Schema",
+  "title": "NotebookRead PreToolUse Schema (obsolete)",
   "description": "JSON Schema for NotebookRead tool PreToolUse events"
 }

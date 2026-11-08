@@ -1,11 +1,23 @@
 {
   "title": "Claude Code Tool Hook Schemas",
-  "description": "Complete JSON Schema files for all Claude Code tool hooks",
-  "version": "2.0.0",
-  "generated_at": "2025-08-03",
-  "naming_convention": "{toolname}-{full_hook_name}.json",
+  "description": "JSON Schema files for Claude Code tool hook payloads.  Schemas marked obsolete describe tools Claude Code no longer has, and are kept for older payloads.",
+  "version": "3.0.0",
+  "naming_convention": "{toolname}-{hook_event}.json, with hook_event one of pre_tool_use, post_tool_use, post_tool_use_failure, permission_request",
   "validation_tool": "uvx check-jsonschema",
   "schemas": {
+    "Agent": {
+      "category": "Workflow",
+      "analysis_fields": [
+        "$.tool_input.description",
+        "$.tool_input.subagent_type"
+      ],
+      "files": {
+        "pre_tool_use": "agent-pre_tool_use.json",
+        "post_tool_use": "agent-post_tool_use.json",
+        "post_tool_use_failure": "agent-post_tool_use_failure.json",
+        "permission_request": "agent-permission_request.json"
+      }
+    },
     "Bash": {
       "category": "System",
       "analysis_fields": [
@@ -14,7 +26,9 @@
       ],
       "files": {
         "pre_tool_use": "bash-pre_tool_use.json",
-        "post_tool_use": "bash-post_tool_use.json"
+        "post_tool_use": "bash-post_tool_use.json",
+        "post_tool_use_failure": "bash-post_tool_use_failure.json",
+        "permission_request": "bash-permission_request.json"
       }
     },
     "Edit": {
@@ -26,7 +40,19 @@
       ],
       "files": {
         "pre_tool_use": "edit-pre_tool_use.json",
-        "post_tool_use": "edit-post_tool_use.json"
+        "post_tool_use": "edit-post_tool_use.json",
+        "post_tool_use_failure": "edit-post_tool_use_failure.json",
+        "permission_request": "edit-permission_request.json"
+      }
+    },
+    "ExitPlanMode": {
+      "category": "Workflow",
+      "analysis_fields": [],
+      "files": {
+        "pre_tool_use": "exitplanmode-pre_tool_use.json",
+        "post_tool_use": "exitplanmode-post_tool_use.json",
+        "post_tool_use_failure": "exitplanmode-post_tool_use_failure.json",
+        "permission_request": "exitplanmode-permission_request.json"
       }
     },
     "Glob": {
@@ -37,7 +63,9 @@
       ],
       "files": {
         "pre_tool_use": "glob-pre_tool_use.json",
-        "post_tool_use": "glob-post_tool_use.json"
+        "post_tool_use": "glob-post_tool_use.json",
+        "post_tool_use_failure": "glob-post_tool_use_failure.json",
+        "permission_request": "glob-permission_request.json"
       }
     },
     "Grep": {
@@ -48,15 +76,21 @@
       ],
       "files": {
         "pre_tool_use": "grep-pre_tool_use.json",
-        "post_tool_use": "grep-post_tool_use.json"
+        "post_tool_use": "grep-post_tool_use.json",
+        "post_tool_use_failure": "grep-post_tool_use_failure.json",
+        "permission_request": "grep-permission_request.json"
       }
     },
-    "LS": {
+    "Monitor": {
       "category": "System",
-      "analysis_fields": [],
+      "analysis_fields": [
+        "$.tool_input.command"
+      ],
       "files": {
-        "pre_tool_use": "ls-pre_tool_use.json",
-        "post_tool_use": "ls-post_tool_use.json"
+        "pre_tool_use": "monitor-pre_tool_use.json",
+        "post_tool_use": "monitor-post_tool_use.json",
+        "post_tool_use_failure": "monitor-post_tool_use_failure.json",
+        "permission_request": "monitor-permission_request.json"
       }
     },
     "Read": {
@@ -66,48 +100,69 @@
       ],
       "files": {
         "pre_tool_use": "read-pre_tool_use.json",
-        "post_tool_use": "read-post_tool_use.json"
+        "post_tool_use": "read-post_tool_use.json",
+        "post_tool_use_failure": "read-post_tool_use_failure.json",
+        "permission_request": "read-permission_request.json"
       }
     },
-    "Write": {
-      "category": "File",
-      "analysis_fields": [
-        "$.tool_input.file_path"
-      ],
-      "files": {
-        "pre_tool_use": "write-pre_tool_use.json",
-        "post_tool_use": "write-post_tool_use.json"
-      }
-    },
-    "Task": {
+    "SendMessage": {
       "category": "Workflow",
       "analysis_fields": [
-        "$.tool_input.description",
-        "$.tool_input.subagent_type"
+        "$.tool_input.to"
       ],
       "files": {
-        "pre_tool_use": "task-pre_tool_use.json",
-        "post_tool_use": "task-post_tool_use.json"
+        "pre_tool_use": "sendmessage-pre_tool_use.json",
+        "post_tool_use": "sendmessage-post_tool_use.json",
+        "post_tool_use_failure": "sendmessage-post_tool_use_failure.json",
+        "permission_request": "sendmessage-permission_request.json"
       }
     },
-    "TodoWrite": {
+    "Skill": {
       "category": "Workflow",
       "analysis_fields": [
-        "$.tool_input.todos"
+        "$.tool_input.skill"
       ],
       "files": {
-        "pre_tool_use": "todowrite-pre_tool_use.json",
-        "post_tool_use": "todowrite-post_tool_use.json"
+        "pre_tool_use": "skill-pre_tool_use.json",
+        "post_tool_use": "skill-post_tool_use.json",
+        "post_tool_use_failure": "skill-post_tool_use_failure.json",
+        "permission_request": "skill-permission_request.json"
       }
     },
-    "WebSearch": {
-      "category": "Web",
+    "TaskCreate": {
+      "category": "Workflow",
+      "analysis_fields": [
+        "$.tool_input.subject"
+      ],
+      "files": {
+        "pre_tool_use": "taskcreate-pre_tool_use.json",
+        "post_tool_use": "taskcreate-post_tool_use.json",
+        "post_tool_use_failure": "taskcreate-post_tool_use_failure.json",
+        "permission_request": "taskcreate-permission_request.json"
+      }
+    },
+    "TaskUpdate": {
+      "category": "Workflow",
+      "analysis_fields": [
+        "$.tool_input.taskId"
+      ],
+      "files": {
+        "pre_tool_use": "taskupdate-pre_tool_use.json",
+        "post_tool_use": "taskupdate-post_tool_use.json",
+        "post_tool_use_failure": "taskupdate-post_tool_use_failure.json",
+        "permission_request": "taskupdate-permission_request.json"
+      }
+    },
+    "ToolSearch": {
+      "category": "Search",
       "analysis_fields": [
         "$.tool_input.query"
       ],
       "files": {
-        "pre_tool_use": "websearch-pre_tool_use.json",
-        "post_tool_use": "websearch-post_tool_use.json"
+        "pre_tool_use": "toolsearch-pre_tool_use.json",
+        "post_tool_use": "toolsearch-post_tool_use.json",
+        "post_tool_use_failure": "toolsearch-post_tool_use_failure.json",
+        "permission_request": "toolsearch-permission_request.json"
       }
     },
     "WebFetch": {
@@ -117,31 +172,88 @@
       ],
       "files": {
         "pre_tool_use": "webfetch-pre_tool_use.json",
-        "post_tool_use": "webfetch-post_tool_use.json"
+        "post_tool_use": "webfetch-post_tool_use.json",
+        "post_tool_use_failure": "webfetch-post_tool_use_failure.json",
+        "permission_request": "webfetch-permission_request.json"
       }
     },
-    "NotebookRead": {
+    "WebSearch": {
+      "category": "Web",
+      "analysis_fields": [
+        "$.tool_input.query"
+      ],
+      "files": {
+        "pre_tool_use": "websearch-pre_tool_use.json",
+        "post_tool_use": "websearch-post_tool_use.json",
+        "post_tool_use_failure": "websearch-post_tool_use_failure.json",
+        "permission_request": "websearch-permission_request.json"
+      }
+    },
+    "Write": {
       "category": "File",
+      "analysis_fields": [
+        "$.tool_input.file_path"
+      ],
+      "files": {
+        "pre_tool_use": "write-pre_tool_use.json",
+        "post_tool_use": "write-post_tool_use.json",
+        "post_tool_use_failure": "write-post_tool_use_failure.json",
+        "permission_request": "write-permission_request.json"
+      }
+    },
+    "LS": {
+      "category": "System",
+      "obsolete": true,
+      "note": "Claude Code no longer has an LS tool; directory listings go through Bash.",
       "analysis_fields": [],
       "files": {
-        "pre_tool_use": "notebookread-pre_tool_use.json",
-        "post_tool_use": "notebookread-post_tool_use.json"
+        "pre_tool_use": "ls-pre_tool_use.json",
+        "post_tool_use": "ls-post_tool_use.json"
       }
     },
     "MultiEdit": {
       "category": "File",
+      "obsolete": true,
+      "note": "Claude Code no longer has a MultiEdit tool; see Edit.",
       "analysis_fields": [],
       "files": {
         "pre_tool_use": "multiedit-pre_tool_use.json",
         "post_tool_use": "multiedit-post_tool_use.json"
       }
     },
-    "ExitPlanMode": {
-      "category": "Workflow",
+    "NotebookRead": {
+      "category": "File",
+      "obsolete": true,
+      "note": "Claude Code no longer has a NotebookRead tool; Read reads notebooks.",
       "analysis_fields": [],
       "files": {
-        "pre_tool_use": "exitplanmode-pre_tool_use.json",
-        "post_tool_use": "exitplanmode-post_tool_use.json"
+        "pre_tool_use": "notebookread-pre_tool_use.json",
+        "post_tool_use": "notebookread-post_tool_use.json"
+      }
+    },
+    "TodoWrite": {
+      "category": "Workflow",
+      "obsolete": true,
+      "note": "Claude Code no longer has a TodoWrite tool; see TaskCreate and TaskUpdate.",
+      "analysis_fields": [
+        "$.tool_input.todos"
+      ],
+      "files": {
+        "pre_tool_use": "todowrite-pre_tool_use.json",
+        "post_tool_use": "todowrite-post_tool_use.json"
+      }
+    },
+    "Task": {
+      "category": "Workflow",
+      "obsolete": true,
+      "note": "The subagent tool is recorded as Agent; see the agent-* schemas.",
+      "analysis_fields": [
+        "$.tool_input.description",
+        "$.tool_input.subagent_type"
+      ],
+      "files": {
+        "pre_tool_use": "task-pre_tool_use.json",
+        "post_tool_use": "task-post_tool_use.json"
       }
     }
   }

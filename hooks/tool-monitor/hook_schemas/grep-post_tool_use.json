@@ -1,9 +1,15 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Grep PostToolUse Schema",
+  "description": "JSON Schema for Grep tool PostToolUse events, derived from captured payloads.  Few Grep payloads were captured, so optional fields also come from earlier captures",
   "type": "object",
   "properties": {
     "session_id": {
       "type": "string"
+    },
+    "prompt_id": {
+      "type": "string",
+      "description": "UUID of the user prompt being processed; absent before the first prompt"
     },
     "transcript_path": {
       "type": "string"
@@ -11,42 +17,42 @@
     "cwd": {
       "type": "string"
     },
+    "scratchpad_dir": {
+      "type": "string"
+    },
+    "permission_mode": {
+      "type": "string",
+      "description": "default, plan, acceptEdits, auto, dontAsk or bypassPermissions"
+    },
+    "effort": {
+      "type": "object",
+      "properties": {
+        "level": {
+          "type": "string",
+          "description": "low, medium, high, xhigh or max"
+        }
+      }
+    },
+    "agent_id": {
+      "type": "string",
+      "description": "Present when the call is made inside a subagent"
+    },
+    "agent_type": {
+      "type": "string",
+      "description": "Present inside a subagent, or in a session started with --agent"
+    },
     "hook_event_name": {
       "const": "PostToolUse"
     },
     "tool_name": {
+      "const": "Grep"
+    },
+    "tool_use_id": {
       "type": "string"
     },
     "tool_input": {
       "type": "object",
       "properties": {
-        "pattern": {
-          "type": "string"
-        },
-        "output_mode": {
-          "type": "string",
-          "enum": [
-            "content",
-            "files_with_matches",
-            "count"
-          ],
-          "default": "files_with_matches"
-        },
-        "path": {
-          "type": "string"
-        },
-        "glob": {
-          "type": "string"
-        },
-        "type": {
-          "type": "string"
-        },
-        "-i": {
-          "type": "boolean"
-        },
-        "-n": {
-          "type": "boolean"
-        },
         "-A": {
           "type": "number"
         },
@@ -56,11 +62,35 @@
         "-C": {
           "type": "number"
         },
-        "multiline": {
+        "-i": {
           "type": "boolean"
+        },
+        "-n": {
+          "type": "boolean"
+        },
+        "-o": {
+          "type": "boolean"
+        },
+        "glob": {
+          "type": "string"
         },
         "head_limit": {
           "type": "number"
+        },
+        "multiline": {
+          "type": "boolean"
+        },
+        "output_mode": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "pattern": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
         }
       },
       "required": [
@@ -70,19 +100,33 @@
     "tool_response": {
       "type": "object",
       "properties": {
-        "mode": {
+        "content": {
           "type": "string"
         },
         "filenames": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
+          "type": "array"
+        },
+        "mode": {
+          "type": "string"
         },
         "numFiles": {
           "type": "number"
+        },
+        "numLines": {
+          "type": "number"
+        },
+        "totalLines": {
+          "type": "number"
         }
-      }
+      },
+      "required": [
+        "mode",
+        "filenames",
+        "numFiles"
+      ]
+    },
+    "duration_ms": {
+      "type": "number"
     }
   },
   "required": [
@@ -92,8 +136,7 @@
     "hook_event_name",
     "tool_name",
     "tool_input",
+    "tool_use_id",
     "tool_response"
-  ],
-  "title": "Grep PostToolUse Schema",
-  "description": "JSON Schema for Grep tool PostToolUse events"
+  ]
 }

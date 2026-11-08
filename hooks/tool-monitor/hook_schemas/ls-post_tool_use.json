@@ -1,5 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
+  "$comment": "Obsolete. Claude Code no longer has an LS tool; directory listings go through Bash.",
   "type": "object",
   "properties": {
     "session_id": {
@@ -47,6 +48,6 @@
     "tool_input",
     "tool_response"
   ],
-  "title": "LS PostToolUse Schema",
+  "title": "LS PostToolUse Schema (obsolete)",
   "description": "JSON Schema for LS tool PostToolUse events"
 }

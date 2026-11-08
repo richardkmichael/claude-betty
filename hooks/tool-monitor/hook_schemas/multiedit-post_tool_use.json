@@ -1,5 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
+  "$comment": "Obsolete. Claude Code no longer has a MultiEdit tool; see Edit.",
   "type": "object",
   "properties": {
     "session_id": {
@@ -75,6 +76,6 @@
     "tool_input",
     "tool_response"
   ],
-  "title": "MultiEdit PostToolUse Schema",
+  "title": "MultiEdit PostToolUse Schema (obsolete)",
   "description": "JSON Schema for MultiEdit tool PostToolUse events"
 }

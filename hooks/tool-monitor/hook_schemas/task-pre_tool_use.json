@@ -1,5 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
+  "$comment": "Obsolete. The subagent tool is recorded as Agent; see the agent-* schemas.",
   "type": "object",
   "properties": {
     "session_id": {
@@ -45,6 +46,6 @@
     "tool_name",
     "tool_input"
   ],
-  "title": "Task PreToolUse Schema",
+  "title": "Task PreToolUse Schema (obsolete)",
   "description": "JSON Schema for Task tool PreToolUse events"
 }

@@ -1,0 +1,105 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Monitor PostToolUse Schema",
+  "description": "JSON Schema for Monitor tool PostToolUse events, derived from captured payloads",
+  "type": "object",
+  "properties": {
+    "session_id": {
+      "type": "string"
+    },
+    "prompt_id": {
+      "type": "string",
+      "description": "UUID of the user prompt being processed; absent before the first prompt"
+    },
+    "transcript_path": {
+      "type": "string"
+    },
+    "cwd": {
+      "type": "string"
+    },
+    "scratchpad_dir": {
+      "type": "string"
+    },
+    "permission_mode": {
+      "type": "string",
+      "description": "default, plan, acceptEdits, auto, dontAsk or bypassPermissions"
+    },
+    "effort": {
+      "type": "object",
+      "properties": {
+        "level": {
+          "type": "string",
+          "description": "low, medium, high, xhigh or max"
+        }
+      }
+    },
+    "agent_id": {
+      "type": "string",
+      "description": "Present when the call is made inside a subagent"
+    },
+    "agent_type": {
+      "type": "string",
+      "description": "Present inside a subagent, or in a session started with --agent"
+    },
+    "hook_event_name": {
+      "const": "PostToolUse"
+    },
+    "tool_name": {
+      "const": "Monitor"
+    },
+    "tool_use_id": {
+      "type": "string"
+    },
+    "tool_input": {
+      "type": "object",
+      "properties": {
+        "command": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "timeout_ms": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "command",
+        "description",
+        "timeout_ms"
+      ]
+    },
+    "tool_response": {
+      "type": "object",
+      "properties": {
+        "persistent": {
+          "type": "boolean"
+        },
+        "taskId": {
+          "type": "string"
+        },
+        "timeoutMs": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "persistent",
+        "taskId",
+        "timeoutMs"
+      ]
+    },
+    "duration_ms": {
+      "type": "number"
+    }
+  },
+  "required": [
+    "session_id",
+    "transcript_path",
+    "cwd",
+    "hook_event_name",
+    "tool_name",
+    "tool_input",
+    "tool_use_id",
+    "tool_response"
+  ]
+}

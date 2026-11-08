@@ -1,9 +1,15 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Bash PostToolUse Schema",
+  "description": "JSON Schema for Bash tool PostToolUse events, derived from captured payloads",
   "type": "object",
   "properties": {
     "session_id": {
       "type": "string"
+    },
+    "prompt_id": {
+      "type": "string",
+      "description": "UUID of the user prompt being processed; absent before the first prompt"
     },
     "transcript_path": {
       "type": "string"
@@ -11,10 +17,37 @@
     "cwd": {
       "type": "string"
     },
+    "scratchpad_dir": {
+      "type": "string"
+    },
+    "permission_mode": {
+      "type": "string",
+      "description": "default, plan, acceptEdits, auto, dontAsk or bypassPermissions"
+    },
+    "effort": {
+      "type": "object",
+      "properties": {
+        "level": {
+          "type": "string",
+          "description": "low, medium, high, xhigh or max"
+        }
+      }
+    },
+    "agent_id": {
+      "type": "string",
+      "description": "Present when the call is made inside a subagent"
+    },
+    "agent_type": {
+      "type": "string",
+      "description": "Present inside a subagent, or in a session started with --agent"
+    },
     "hook_event_name": {
       "const": "PostToolUse"
     },
     "tool_name": {
+      "const": "Bash"
+    },
+    "tool_use_id": {
       "type": "string"
     },
     "tool_input": {
@@ -23,34 +56,143 @@
         "command": {
           "type": "string"
         },
+        "dangerouslyDisableSandbox": {
+          "type": "boolean"
+        },
         "description": {
           "type": "string"
+        },
+        "run_in_background": {
+          "type": "boolean"
         },
         "timeout": {
           "type": "number"
         }
       },
       "required": [
-        "command",
-        "description"
+        "command"
       ]
     },
     "tool_response": {
       "type": "object",
       "properties": {
-        "stdout": {
+        "backgroundCwdHint": {
           "type": "string"
         },
-        "stderr": {
+        "backgroundTaskId": {
           "type": "string"
+        },
+        "backgroundedToDeliverMessage": {
+          "type": "boolean"
+        },
+        "bashEditDiff": {
+          "type": "object",
+          "properties": {
+            "changedFiles": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "files": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            },
+            "moreFiles": {
+              "type": "number"
+            },
+            "shared": {
+              "type": "boolean"
+            },
+            "unavailable": {
+              "type": "boolean"
+            }
+          }
+        },
+        "dangerouslyDisableSandbox": {
+          "type": "boolean"
+        },
+        "gitOperation": {
+          "type": "object",
+          "properties": {
+            "branch": {
+              "type": "object",
+              "properties": {
+                "action": {
+                  "type": "string"
+                },
+                "ref": {
+                  "type": "string"
+                }
+              }
+            },
+            "commit": {
+              "type": "object",
+              "properties": {
+                "branch": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string"
+                },
+                "sha": {
+                  "type": "string"
+                }
+              }
+            },
+            "push": {
+              "type": "object",
+              "properties": {
+                "branch": {
+                  "type": "string"
+                }
+              }
+            }
+          }
         },
         "interrupted": {
           "type": "boolean"
         },
         "isImage": {
           "type": "boolean"
+        },
+        "noOutputExpected": {
+          "type": "boolean"
+        },
+        "persistedOutputPath": {
+          "type": "string"
+        },
+        "persistedOutputSize": {
+          "type": "number"
+        },
+        "returnCodeInterpretation": {
+          "type": "string"
+        },
+        "staleReadFileStateHint": {
+          "type": "string"
+        },
+        "stderr": {
+          "type": "string"
+        },
+        "stdout": {
+          "type": "string"
+        },
+        "timedOutAfterMs": {
+          "type": "number"
         }
-      }
+      },
+      "required": [
+        "interrupted",
+        "isImage",
+        "noOutputExpected",
+        "stderr",
+        "stdout"
+      ]
+    },
+    "duration_ms": {
+      "type": "number"
     }
   },
   "required": [
@@ -60,8 +202,7 @@
     "hook_event_name",
     "tool_name",
     "tool_input",
+    "tool_use_id",
     "tool_response"
-  ],
-  "title": "Bash PostToolUse Schema",
-  "description": "JSON Schema for Bash tool PostToolUse events"
+  ]
 }
