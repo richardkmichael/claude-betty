@@ -19,12 +19,14 @@ def connect_to_db(db_path: str) -> sqlite3.Connection:
     return conn
 
 def get_tool_usage_stats(conn: sqlite3.Connection) -> Dict[str, int]:
-    """Get tool usage statistics."""
+    """Get tool usage statistics.  Session, subagent and stop events have no tool, so they are
+    left out."""
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT tool_name, COUNT(*) as count 
-        FROM tool_events 
-        GROUP BY tool_name 
+        SELECT tool_name, COUNT(*) as count
+        FROM tool_events
+        WHERE tool_name IS NOT NULL
+        GROUP BY tool_name
         ORDER BY count DESC
     """)
     
