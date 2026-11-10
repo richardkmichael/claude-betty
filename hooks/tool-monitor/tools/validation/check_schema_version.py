@@ -96,13 +96,9 @@ def check_database_schema(db_path: str):
         if version.startswith('3.'):
             print("\n✅ Compatible with current tools (V3)")
             print("   - tools/migration/migrate_to_v3.py: Not needed")
-            print("   - tools/validation/validate_against_schemas.py: Compatible")
-            print("   - tools/validation/derive_schemas_from_payloads.py: Compatible")
         elif version.startswith('2.'):
             print("\n⚠️  V2 schema — migration available")
             print("   - tools/migration/migrate_to_v3.py: Run to upgrade to V3")
-            print("   - tools/validation/validate_against_schemas.py: Compatible")
-            print("   - tools/validation/derive_schemas_from_payloads.py: Compatible")
         else:
             print(f"\n⚠️  Unknown version: {version}")
             print("   Schema compatibility uncertain")

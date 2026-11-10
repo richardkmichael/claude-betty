@@ -88,9 +88,6 @@ python tools/migration/migrate_to_v3.py your_existing_monitor.db
 
 # Migrate V3.0 → V3.1 (FTS5 tables keyed by event id, delete and update triggers)
 python tools/migration/migrate_to_v3_1.py your_existing_monitor.db
-
-# Validate schemas work correctly
-python tools/validation/validate_against_schemas.py your_existing_monitor.db
 ```
 
 Adding hook events needs no migration.  Their rows go into `tool_events` like any other payload.
@@ -100,7 +97,6 @@ Adding hook events needs no migration.  Their rows go into `tool_events` like an
 - Schema V3: FTS5 trigram search, expression indexes, one table for every hook event
 - Fast Rust binary: processes hook events with excellent performance
 - SQLite storage: WAL mode for concurrent access, generated columns for stable fields
-- JSON Schema validation: industry-standard validation using `uvx check-jsonschema`
 - Migration tools: safe V1→V2, V2→V3 and V3.0→V3.1 migration, with automatic backups or resumable
   steps
 - Archiving: moves old events to a compressed SQLite archive and shrinks the live database
@@ -110,9 +106,9 @@ Adding hook events needs no migration.  Their rows go into `tool_events` like an
 ### Schema V3 Design
 - `schema_info`: database schema version, metadata, and hook_common_fields list
 - `tool_events`: minimal table with stable hook fields + full JSON payload
-- `tool_schemas`: JSON Schema documents for each tool/hook combination, loaded by the migration
-  tools.  It is a snapshot, and does not follow later changes to `hook_schemas/`.
-- `schema_versions`: tool schema evolution tracking
+- `tool_schemas`: JSON Schema documents for the core tools, written by the V2 and V3 migrations.
+  They record payload shapes at migration time, and nothing updates them.
+- `schema_versions`: one row per `tool_schemas` entry, also written only by the migrations
 - FTS5 virtual tables: fast wildcard/substring search over key tool_input fields
 - Expression indexes: fast equality lookups on tool_input fields
 
@@ -155,15 +151,7 @@ tables in step with `tool_events` on insert, delete and update.
 
 Note: special characters (`.`, `-`, `/`) require phrase quoting: `MATCH '"term.ext"'`
 
-## JSON Schema Files
-
-The `hook_schemas/` directory contains JSON Schema files for tool validation:
-- Naming: `{toolname}-{hook_event}.json`, with `hook_event` one of `pre_tool_use`, `post_tool_use`,
-  `post_tool_use_failure` and `permission_request` (e.g., `bash-pre_tool_use.json`)
-- Coverage: the core built-in tools, each for all four tool events.  `index.json` lists them.
-- Obsolete tools (`Task`, `TodoWrite`, `MultiEdit`, `NotebookRead`, `LS`) keep their files, marked
-  obsolete, for older payloads.
-- MCP tools and other built-in tools have no schema files.
+## Payload Fields
 
 `HOOK_SCHEMAS.md` describes the fields, and `HOOK_ARCHITECTURE.md` describes how events are named
 and paired.
@@ -267,29 +255,6 @@ INSERT INTO tool_events (id, session_id, payload, created_at)
 SELECT id, session_id, payload, created_at FROM archive.tool_events;
 ```
 
-### `tools/validation/validate_against_schemas.py`
-Validates database payloads against JSON schemas using `uvx check-jsonschema`.  For each tool and
-tool event in the database, it validates the most recent payload against the matching file in
-`hook_schemas/`, relative to the current directory, so run it from this directory.  A tool with no
-schema file counts as a failure.
-
-```bash
-# Validate all tools
-python tools/validation/validate_against_schemas.py monitor.db
-
-# Validate specific tool
-python tools/validation/validate_against_schemas.py monitor.db Bash PreToolUse
-```
-
-### `tools/validation/derive_schemas_from_payloads.py`
-Analyzes actual payloads and reports, for each tool and hook event, the top-level fields with their
-types and how often they appear.  It prints the analysis and does not write schema files.
-
-```bash
-python tools/validation/derive_schemas_from_payloads.py monitor.db
-python tools/validation/derive_schemas_from_payloads.py monitor.db --tool Bash
-```
-
 ### `tools/validation/check_schema_version.py`
 Checks database schema version and compatibility.
 
@@ -359,5 +324,4 @@ SELECT tool_name, hook_event, category
 ## Dependencies
 
 - Runtime: none (SQLite bundled)
-- Validation: `uvx` (for JSON Schema validation)
 - Migration and maintenance: Python 3.9+

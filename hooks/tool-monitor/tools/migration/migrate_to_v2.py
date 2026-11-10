@@ -442,7 +442,6 @@ def main():
         print()
         print("🎉 Migration completed successfully!")
         print("You can now use the V2 tools:")
-        print(f"  python tools/validation/validate_against_schemas.py {db_path}")
         print(f"  python tools/validation/check_schema_version.py {db_path}")
     else:
         print()

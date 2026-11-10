@@ -217,9 +217,8 @@ their rows in `tool_events` have a NULL `tool_name` column.
 
 ## Tool-Specific Input/Output Schemas
 
-Each tool extends the base schema with its own `tool_input` and `tool_response`.  The JSON Schema
-files in `hook_schemas/` hold the full structures; the tables below list the fields.  Fields marked
-optional are absent from some payloads.
+Each tool extends the base schema with its own `tool_input` and `tool_response`.  The tables below
+list the fields.  Fields marked optional are absent from some payloads.
 
 Every built-in tool returns an object as its `tool_response`.  MCP tools return an object, an array
 of content blocks or, rarely, a string, so the base schema accepts all three.
@@ -462,8 +461,8 @@ finishes, so the response has no usage fields.  `SubagentStop` marks the end of 
 
 ## Obsolete Tools
 
-Claude Code no longer has these tools.  Their files in `hook_schemas/` are kept, and marked
-obsolete, for databases that hold older payloads.
+Claude Code no longer has these tools.  Their names still appear in databases that hold older
+payloads.
 
 | Tool           | Replacement                                  |
 | -------------- | -------------------------------------------- |
@@ -473,9 +472,17 @@ obsolete, for databases that hold older payloads.
 | `NotebookRead` | `Read`                                       |
 | `LS`           | `Bash` and `Glob`                            |
 
-## Tools Without Schema Files
+## Other Tools
 
-`hook_schemas/` covers the core built-in tools.  Other tools appear in the database without a schema
-file: MCP tools (`mcp__<server>__<tool>`) and other built-in tools such as `AskUserQuestion`,
-`SubagentHandback`, `TaskGet`, `TaskList`, `TaskStop` and the `Cron*` tools.  To see their
-structure, run `tools/validation/derive_schemas_from_payloads.py` with `--tool <name>`.
+The tables above cover the core built-in tools.  The database also holds MCP tools
+(`mcp__<server>__<tool>`) and other built-in tools such as `AskUserQuestion`, `SubagentHandback`,
+`TaskGet`, `TaskList`, `TaskStop` and the `Cron*` tools.  To see their fields, read recent
+payloads:
+
+```sql
+SELECT json_extract(payload, '$.tool_input')
+  FROM tool_events
+ WHERE tool_name = 'SubagentHandback' AND hook_event_name = 'PreToolUse'
+ ORDER BY id DESC
+ LIMIT 3;
+```
